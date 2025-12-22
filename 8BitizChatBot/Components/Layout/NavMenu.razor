@@ -1,0 +1,120 @@
+@namespace BitizChatBot.Components.Layout
+
+<div class="nav-menu">
+    <div class="nav-header">
+        <h3>8Bitiz ChatBot</h3>
+    </div>
+    
+    <nav class="nav-links">
+        <NavLink href="" Match="NavLinkMatch.All" class="nav-link">
+            <span class="nav-icon">💬</span>
+            <span class="nav-text">Chat</span>
+        </NavLink>
+        <NavLink href="admin" class="nav-link">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-text">Admin Dashboard</span>
+        </NavLink>
+    </nav>
+</div>
+
+<style>
+    .nav-menu {
+        background: linear-gradient(180deg, #000000 0%, #1a1a1a 100%);
+        height: 100vh;
+        width: 250px;
+        display: flex;
+        flex-direction: column;
+        border-right: 3px solid #dc143c;
+        padding: 0;
+    }
+
+    .nav-header {
+        background: rgba(220, 20, 60, 0.1);
+        padding: 1.5rem 1rem;
+        border-bottom: 2px solid #dc143c;
+    }
+
+    .nav-header h3 {
+        margin: 0;
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .nav-links {
+        flex: 1;
+        padding: 1rem 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .nav-link {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 1.5rem;
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.3s ease;
+        border-left: 3px solid transparent;
+        margin: 0 0.5rem;
+        border-radius: 8px;
+    }
+
+    .nav-link:hover {
+        background: rgba(220, 20, 60, 0.2);
+        color: white;
+        border-left-color: #dc143c;
+    }
+
+    .nav-link.active {
+        background: linear-gradient(90deg, rgba(220, 20, 60, 0.3) 0%, rgba(220, 20, 60, 0.1) 100%);
+        color: white;
+        border-left-color: #dc143c;
+        font-weight: 600;
+    }
+
+    .nav-icon {
+        font-size: 1.25rem;
+        margin-right: 0.75rem;
+        width: 24px;
+        text-align: center;
+    }
+
+    .nav-text {
+        font-size: 0.95rem;
+    }
+
+    @@media (max-width: 640px) {
+        .nav-menu {
+            width: 100%;
+            height: auto;
+            border-right: none;
+            border-bottom: 3px solid #dc143c;
+        }
+
+        .nav-links {
+            flex-direction: row;
+            overflow-x: auto;
+            padding: 0.5rem;
+        }
+
+        .nav-link {
+            flex-direction: column;
+            padding: 0.5rem 1rem;
+            min-width: 80px;
+            margin: 0;
+        }
+
+        .nav-icon {
+            margin-right: 0;
+            margin-bottom: 0.25rem;
+        }
+
+        .nav-text {
+            font-size: 0.8rem;
+        }
+    }
+</style>
+

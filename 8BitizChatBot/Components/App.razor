@@ -1,0 +1,155 @@
+@namespace BitizChatBot.Components
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="app.css" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <BitizChatBot.Components.Routes />
+    <script src="_framework/blazor.web.js"></script>
+    <script>
+        window.scrollToBottom = (element) => {
+            if (element) {
+                // Use requestAnimationFrame for smooth scrolling
+                requestAnimationFrame(() => {
+                    element.scrollTop = element.scrollHeight;
+                    // Also try smooth scroll behavior
+                    element.scrollTo({
+                        top: element.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                });
+            }
+        };
+
+        window.getCurrentLocation = () => {
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                    resolve({ success: false, error: 'Geolocation is not supported by your browser' });
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        resolve({
+                            success: true,
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        });
+                    },
+                    (error) => {
+                        resolve({
+                            success: false,
+                            error: error.message || 'Location access denied'
+                        });
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        };
+
+        // Setup Enter key handler for chat input
+        window.setupChatInputEnterKey = (element, dotNetHelper) => {
+            if (element) {
+                element.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        // Find the submit button and click it
+                        const form = element.closest('form');
+                        if (form) {
+                            const submitButton = form.querySelector('button[type="submit"]');
+                            if (submitButton && !submitButton.disabled) {
+                                submitButton.click();
+                            }
+                        }
+                    }
+                });
+            }
+        };
+
+        // Download text file
+        window.downloadTextFile = (filename, text) => {
+            const element = document.createElement('a');
+            const file = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            element.href = URL.createObjectURL(file);
+            element.download = filename;
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+            URL.revokeObjectURL(element.href);
+        };
+
+        // Focus element
+        window.focusElement = (element) => {
+            if (element) {
+                element.focus();
+            }
+        };
+
+        // Play chat sounds
+        window.playChatSound = (soundType) => {
+            try {
+                // Create audio context for sound generation
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                if (soundType === 'typing') {
+                    // Soft typing sound (subtle beep)
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.frequency.value = 800;
+                    oscillator.type = 'sine';
+                    
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
+                    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.1);
+                    
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.1);
+                } else if (soundType === 'message') {
+                    // Message received sound (pleasant notification)
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    // Two-tone notification sound
+                    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+                    oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.1);
+                    oscillator.type = 'sine';
+                    
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.01);
+                    gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.15);
+                    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2);
+                    
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.2);
+                }
+            } catch (error) {
+                // Silently fail if audio is not supported or user interaction required
+                console.log('Sound playback not available:', error);
+            }
+        };
+    </script>
+    <script src="app.js"></script>
+</body>
+
+</html>
+

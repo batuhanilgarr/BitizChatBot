@@ -1,0 +1,1603 @@
+@page "/admin"
+@namespace BitizChatBot.Components.Pages
+@using BitizChatBot.Models
+@using BitizChatBot.Services
+@using Microsoft.AspNetCore.Components.Web
+@inject IAdminSettingsService AdminSettingsService
+@inject IOllamaService OllamaService
+@inject IDomainApiKeyService DomainApiKeyService
+@inject IDomainAppearanceService DomainAppearanceService
+@inject IConfiguration Configuration
+@inject IJSRuntime JSRuntime
+@rendermode RenderMode.InteractiveServer
+
+<PageTitle>Admin Dashboard - LLM Settings</PageTitle>
+
+<div class="admin-wrapper">
+    <div class="admin-container">
+        @if (!_authChecked)
+        {
+            <div class="loading-container">
+                <div class="spinner"></div>
+                <p>Loading...</p>
+            </div>
+        }
+        else if (!_isAuthenticated)
+        {
+            <div class="login-card">
+                <h2>🔐 Admin Girişi</h2>
+                <p>Lütfen admin kullanıcı adı ve şifrenizi girin.</p>
+                <EditForm Model="@_loginModel" OnValidSubmit="HandleLogin">
+                    <DataAnnotationsValidator />
+                    <div class="form-group">
+                        <label for="loginUser">Kullanıcı Adı</label>
+                        <InputText id="loginUser" @bind-Value="_loginModel.Username" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPass">Şifre</label>
+                        <InputText id="loginPass" @bind-Value="_loginModel.Password" type="password" class="form-control" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(_loginError))
+                    {
+                        <div class="alert alert-error">
+                            @_loginError
+                        </div>
+                    }
+                    <button type="submit" class="btn btn-primary">Giriş Yap</button>
+                </EditForm>
+            </div>
+        }
+        else
+        {
+
+        <div class="admin-header">
+            <h1>🔧 Admin Dashboard</h1>
+            <p class="subtitle">LLM Provider & Chatbot Configuration</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-button @(_activeTab == "llm" ? "active" : "")" @onclick='() => SetActiveTab("llm")'>
+                🤖 LLM Settings
+            </button>
+            <button class="tab-button @(_activeTab == "appearance" ? "active" : "")" @onclick='() => SetActiveTab("appearance")'>
+                🎨 Chatbot Appearance
+            </button>
+            <button class="tab-button @(_activeTab == "domains" ? "active" : "")" @onclick='() => SetActiveTab("domains")'>
+                🌐 Domain & API Keys
+            </button>
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="loading-container">
+                <div class="spinner"></div>
+                <p>Loading settings...</p>
+            </div>
+        }
+        else if (_showSuccess)
+        {
+            <div class="alert alert-success">
+                <strong>✓ Success!</strong> Settings saved successfully.
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-error">
+                <strong>✗ Error:</strong> @_errorMessage
+            </div>
+        }
+
+        <EditForm Model="@_settings" OnValidSubmit="HandleSave">
+            <DataAnnotationsValidator />
+            
+            @if (!_isAuthenticated)
+            {
+                <!-- Hide settings when not authenticated -->
+            }
+            else if (_activeTab == "llm")
+            {
+                <div class="settings-form">
+                <div class="form-group">
+                    <label for="llmProvider">LLM Provider</label>
+                    <InputSelect id="llmProvider" @bind-Value="_settings.LlmProvider" class="form-control" @onchange="HandleProviderChange">
+                        <option value="Ollama">Ollama (Local LLM)</option>
+                        <option value="OpenAI">OpenAI</option>
+                        <option value="Anthropic">Anthropic (Claude)</option>
+                    </InputSelect>
+                    <ValidationMessage For="@(() => _settings.LlmProvider)" />
+                </div>
+
+                @if (_settings.LlmProvider == "Ollama")
+                {
+                    <div class="form-group">
+                        <label for="ollamaBaseUrl">Ollama Base URL</label>
+                        <div class="input-with-button">
+                            <InputText id="ollamaBaseUrl" 
+                                       @bind-Value="_settings.OllamaBaseUrl" 
+                                       class="form-control" 
+                                       placeholder="http://3.14.208.235:11434" />
+                            <button type="button" 
+                                    class="btn btn-test" 
+                                    @onclick="HandleTestConnection"
+                                    disabled="@_isTestingConnection">
+                                @if (_isTestingConnection)
+                                {
+                                    <span>Testing...</span>
+                                }
+                                else
+                                {
+                                    <span>🔌 Test Connection</span>
+                                }
+                            </button>
+                        </div>
+                        <ValidationMessage For="@(() => _settings.OllamaBaseUrl)" />
+                        <small class="form-text">Ollama server URL (e.g., http://3.14.208.235:11434)</small>
+                        @if (_connectionStatus == "success")
+                        {
+                            <div class="connection-status success">✓ Connection successful!</div>
+                        }
+                        else if (_connectionStatus == "error")
+                        {
+                            <div class="connection-status error">✗ Connection failed. Please check the URL.</div>
+                        }
+                    </div>
+
+                    @if (_availableModels.Any())
+                    {
+                        <div class="form-group">
+                            <label for="modelSelect">Select Model</label>
+                            <InputSelect id="modelSelect" 
+                                         @bind-Value="_settings.ModelName" 
+                                         class="form-control">
+                                <option value="">-- Select a model --</option>
+                                @foreach (var model in _availableModels)
+                                {
+                                    <option value="@model">@model</option>
+                                }
+                            </InputSelect>
+                            <small class="form-text">Available models from Ollama server</small>
+                        </div>
+                    }
+                    else if (_connectionStatus == "success")
+                    {
+                        <div class="form-group">
+                            <label for="modelName">Model Name</label>
+                            <InputText id="modelName" 
+                                       @bind-Value="_settings.ModelName" 
+                                       class="form-control" 
+                                       placeholder="e.g., hermes3:8b, qwen3:8b" />
+                            <ValidationMessage For="@(() => _settings.ModelName)" />
+                            <small class="form-text">Enter model name manually</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="form-group">
+                            <label for="modelName">Model Name</label>
+                            <InputText id="modelName" 
+                                       @bind-Value="_settings.ModelName" 
+                                       class="form-control" 
+                                       placeholder="e.g., hermes3:8b, qwen3:8b" />
+                            <ValidationMessage For="@(() => _settings.ModelName)" />
+                            <small class="form-text">Test connection first to load available models</small>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="form-group">
+                        <label for="modelName">Model Name</label>
+                        <InputText id="modelName" 
+                                   @bind-Value="_settings.ModelName" 
+                                   class="form-control" 
+                                   placeholder="e.g., gpt-4o, gpt-4, claude-3-opus" />
+                        <ValidationMessage For="@(() => _settings.ModelName)" />
+                        <small class="form-text">
+                            Examples: gpt-4o, gpt-4, gpt-3.5-turbo, claude-3-opus, claude-3-sonnet
+                        </small>
+                    </div>
+                }
+
+                @if (_settings.LlmProvider != "Ollama")
+                {
+                    <div class="form-group">
+                        <label for="apiKey">API Key</label>
+                        <InputText id="apiKey" 
+                                   @bind-Value="_settings.ApiKey" 
+                                   type="password" 
+                                   class="form-control" 
+                                   placeholder="Enter your API key" />
+                        <ValidationMessage For="@(() => _settings.ApiKey)" />
+                        <small class="form-text">Your API key is stored securely in appsettings.llm.json.</small>
+                    </div>
+                }
+
+                <div class="form-group">
+                    <label for="systemPrompt">System Prompt</label>
+                    <InputTextArea id="systemPrompt" 
+                                   @bind-Value="_settings.SystemPrompt" 
+                                   class="form-control system-prompt" 
+                                   rows="6"
+                                   placeholder="Enter the system prompt for the chatbot..." />
+                    <ValidationMessage For="@(() => _settings.SystemPrompt)" />
+                    <small class="form-text">This prompt defines the chatbot's behavior and personality.</small>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="temperature">Temperature</label>
+                        <InputNumber id="temperature" 
+                                     @bind-Value="_settings.Temperature" 
+                                     class="form-control" 
+                                     min="0" 
+                                     max="2" 
+                                     step="0.1" />
+                        <ValidationMessage For="@(() => _settings.Temperature)" />
+                        <small class="form-text">Controls randomness (0.0 = deterministic, 2.0 = creative)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maxTokens">Max Tokens</label>
+                        <InputNumber id="maxTokens" 
+                                     @bind-Value="_settings.MaxTokens" 
+                                     class="form-control" 
+                                     min="100" 
+                                     max="8000" />
+                        <ValidationMessage For="@(() => _settings.MaxTokens)" />
+                        <small class="form-text">Maximum tokens in the response</small>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" disabled="@_isSaving">
+                        @if (_isSaving)
+                        {
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span>💾 Save Settings</span>
+                        }
+                    </button>
+                    <button type="button" class="btn btn-secondary" @onclick="HandleReset">🔄 Reset to Defaults</button>
+                </div>
+                </div>
+            }
+            else if (_activeTab == "appearance")
+            {
+                <div class="settings-form">
+                    <h2 class="section-title">🎨 Chatbot Görünüm Ayarları</h2>
+                    
+                    <div class="form-group inline-checkbox">
+                        <InputCheckbox id="chatbotOnline"
+                                       @bind-Value="_settings.ChatbotOnline"
+                                       class="form-checkbox" />
+                        <label for="chatbotOnline">Chatbot çevrimiçi</label>
+                        <small class="form-text">Kapatıldığında widget çevrimdışı görünür ve mesaj gönderilemez.</small>
+                    </div>
+
+                    <div class="form-group inline-checkbox">
+                        <InputCheckbox id="openChatOnLoad"
+                                       @bind-Value="_settings.OpenChatOnLoad"
+                                       class="form-checkbox" />
+                        <label for="openChatOnLoad">Sayfa yüklendiğinde sohbet penceresi açık gelsin</label>
+                        <small class="form-text">İşaretlenirse kullanıcı siteye girdiğinde sohbet penceresi otomatik açık olur.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chatbotName">Chatbot Adı</label>
+                        <InputText id="chatbotName" 
+                                   @bind-Value="_settings.ChatbotName" 
+                                   class="form-control" 
+                                   placeholder="Bridgestone Chatbot" />
+                        <small class="form-text">Chatbot widget'ında görünecek isim</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chatbotLogoUrl">Logo URL</label>
+                        <InputText id="chatbotLogoUrl" 
+                                   @bind-Value="_settings.ChatbotLogoUrl" 
+                                   class="form-control" 
+                                   placeholder="https://example.com/logo.png" />
+                        <small class="form-text">Chatbot widget'ında gösterilecek logo URL'i (opsiyonel)</small>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="primaryColor">Ana Renk</label>
+                            <InputText id="primaryColor" 
+                                       @bind-Value="_settings.PrimaryColor" 
+                                       type="color"
+                                       class="form-control color-input" />
+                            <small class="form-text">Chatbot'un ana rengi (varsayılan: siyah)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="secondaryColor">Vurgu Rengi</label>
+                            <InputText id="secondaryColor" 
+                                       @bind-Value="_settings.SecondaryColor" 
+                                       type="color"
+                                       class="form-control color-input" />
+                            <small class="form-text">Chatbot'un vurgu rengi (varsayılan: kırmızı)</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="welcomeMessage">Hoş Geldiniz Mesajı</label>
+                        <InputTextArea id="welcomeMessage" 
+                                       @bind-Value="_settings.WelcomeMessage" 
+                                       class="form-control" 
+                                       rows="5"
+                                       placeholder="Merhaba! Bridgestone chatbot'una hoş geldiniz..." />
+                        <small class="form-text">Chatbot açıldığında gösterilecek hoş geldiniz mesajı</small>
+                    </div>
+
+                    <h3 class="subsection-title">⚡️ Hazır Mesajlar</h3>
+                    <p class="subsection-description">Her satır ayrı bir hazır mesaj olacak. Örnek: "Konumuma yakın bayileri arıyorum"</p>
+                    <div class="form-group">
+                        <label for="quickReplies">Hazır Mesaj Listesi</label>
+                        <InputTextArea id="quickReplies"
+                                       @bind-Value="_quickRepliesText"
+                                       class="form-control"
+                                       rows="3"
+                                       placeholder="Her satıra bir mesaj yazın" />
+                        <small class="form-text">Kullanıcı widget içinde buton olarak görür ve tıklayınca mesaj gönderilir.</small>
+                    </div>
+
+                    <h3 class="subsection-title">💬 Hazır Cevaplar</h3>
+                    <p class="subsection-description">Kullanıcıların belirli sorularına verilecek hazır cevapları düzenleyin</p>
+
+                    <div class="form-group">
+                        <label for="greetingResponse">Selamlama Cevabı</label>
+                        <InputTextArea id="greetingResponse" 
+                                       @bind-Value="_settings.GreetingResponse" 
+                                       class="form-control" 
+                                       rows="2" />
+                        <small class="form-text">"Merhaba", "Selam" gibi selamlamalara verilecek cevap</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="howAreYouResponse">Nasılsın Cevabı</label>
+                        <InputTextArea id="howAreYouResponse" 
+                                       @bind-Value="_settings.HowAreYouResponse" 
+                                       class="form-control" 
+                                       rows="2" />
+                        <small class="form-text">"Nasılsın" sorularına verilecek cevap</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="whoAreYouResponse">Kimsin Cevabı</label>
+                        <InputTextArea id="whoAreYouResponse" 
+                                       @bind-Value="_settings.WhoAreYouResponse" 
+                                       class="form-control" 
+                                       rows="3" />
+                        <small class="form-text">"Kimsin" sorularına verilecek cevap</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="whatCanYouDoResponse">Ne Yapabilirsin Cevabı</label>
+                        <InputTextArea id="whatCanYouDoResponse" 
+                                       @bind-Value="_settings.WhatCanYouDoResponse" 
+                                       class="form-control" 
+                                       rows="5" />
+                        <small class="form-text">"Ne yapabilirsin" sorularına verilecek cevap</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="thanksResponse">Teşekkür Cevabı</label>
+                        <InputTextArea id="thanksResponse" 
+                                       @bind-Value="_settings.ThanksResponse" 
+                                       class="form-control" 
+                                       rows="2" />
+                        <small class="form-text">"Teşekkür" mesajlarına verilecek cevap</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="goodbyeResponse">Veda Cevabı</label>
+                        <InputTextArea id="goodbyeResponse" 
+                                       @bind-Value="_settings.GoodbyeResponse" 
+                                       class="form-control" 
+                                       rows="2" />
+                        <small class="form-text">"Güle güle", "Hoşça kal" gibi vedalara verilecek cevap</small>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" disabled="@_isSaving">
+                            @if (_isSaving)
+                            {
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <span>💾 Save Settings</span>
+                            }
+                        </button>
+                        <button type="button" class="btn btn-secondary" @onclick="HandleResetAppearance">🔄 Reset to Defaults</button>
+                    </div>
+                </div>
+            }
+            else if (_activeTab == "domains")
+            {
+                <div class="settings-form">
+                    <h2 class="section-title">🌐 Domain & API Key Yönetimi</h2>
+                    <p class="subsection-description">
+                        Bu bölümde hangi domain'lerin bu chatbot'u kullanabileceğini ve onlara ait API key'leri yönetebilirsiniz. Her domain için görünüm ayarlarını düzenlemek için <strong>Edit</strong> butonuna tıklayın.
+                    </p>
+
+                    <div class="form-actions space-between">
+                        <button type="button" class="btn btn-primary" @onclick="HandleNewDomainKey">+ New Key</button>
+                    </div>
+
+                    @if (_domainKeys.Any())
+                    {
+                        <table class="table domain-table">
+                            <thead>
+                                <tr>
+                                    <th>Domain</th>
+                                    <th>API Key</th>
+                                    <th>Durum</th>
+                                    <th>Oluşturulma</th>
+                                    <th>İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var key in _domainKeys)
+                                {
+                                    <tr>
+                                        <td><strong>@key.Domain</strong></td>
+                                        <td>
+                                            <code class="api-key-code">@key.ApiKey</code>
+                                        </td>
+                                        <td>
+                                            <span class="status-badge @(key.IsActive ? "active" : "inactive")">
+                                                @(key.IsActive ? "Aktif" : "Pasif")
+                                            </span>
+                                        </td>
+                                        <td>@key.CreatedAt.ToLocalTime().ToString("g")</td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <button type="button"
+                                                        class="btn btn-edit btn-sm"
+                                                        @onclick="() => HandleEditDomain(key.Domain)">
+                                                    ✏️ Edit
+                                                </button>
+                                                <button type="button"
+                                                        class="btn btn-info btn-sm"
+                                                        @onclick="() => HandleCopyScript(key.Domain, key.ApiKey)">
+                                                    📋 Script
+                                                </button>
+                                                <button type="button"
+                                                        class="btn btn-danger btn-sm"
+                                                        @onclick="() => HandleDeleteDomainKey(key.Id)">
+                                                    🗑️ Sil
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="empty-state">
+                            <p>Henüz tanımlanmış bir domain yok. Yeni bir anahtar oluşturmak için <strong>New Key</strong> butonuna tıklayın.</p>
+                        </div>
+                    }
+                </div>
+
+                @* Domain Appearance Edit Modal *@
+                @if (_showEditModal)
+                {
+                    <div class="modal-overlay" @onclick="CloseEditModal">
+                        <div class="modal-content" @onclick:stopPropagation="true">
+                            <div class="modal-header">
+                                <h3>🖌️ Görünüm Ayarları: @_editingDomain</h3>
+                                <button type="button" class="modal-close" @onclick="CloseEditModal">✕</button>
+                            </div>
+                            <div class="modal-body">
+                                @if (_isDomainAppearanceLoading)
+                                {
+                                    <div class="loading-container">
+                                        <div class="spinner"></div>
+                                        <p>Yükleniyor...</p>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="form-group inline-checkbox">
+                                        <InputCheckbox id="daChatbotOnline"
+                                                       @bind-Value="_domainAppearance.ChatbotOnline"
+                                                       class="form-checkbox" />
+                                        <label for="daChatbotOnline">Chatbot çevrimiçi</label>
+                                        <small class="form-text">Kapatıldığında widget çevrimdışı görünür ve mesaj gönderilemez.</small>
+                                    </div>
+
+                                    <div class="form-group inline-checkbox">
+                                        <InputCheckbox id="daOpenChatOnLoad"
+                                                       @bind-Value="_domainAppearance.OpenChatOnLoad"
+                                                       class="form-checkbox" />
+                                        <label for="daOpenChatOnLoad">Sayfa yüklendiğinde sohbet penceresi açık gelsin</label>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="daChatbotName">Chatbot Adı</label>
+                                        <InputText id="daChatbotName"
+                                                   @bind-Value="_domainAppearance.ChatbotName"
+                                                   class="form-control" />
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="daChatbotLogoUrl">Logo URL</label>
+                                        <InputText id="daChatbotLogoUrl"
+                                                   @bind-Value="_domainAppearance.ChatbotLogoUrl"
+                                                   class="form-control" />
+                                    </div>
+
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="daPrimaryColor">Ana Renk</label>
+                                            <InputText id="daPrimaryColor"
+                                                       @bind-Value="_domainAppearance.PrimaryColor"
+                                                       type="color"
+                                                       class="form-control color-input" />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="daSecondaryColor">Vurgu Rengi</label>
+                                            <InputText id="daSecondaryColor"
+                                                       @bind-Value="_domainAppearance.SecondaryColor"
+                                                       type="color"
+                                                       class="form-control color-input" />
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="daWelcomeMessage">Hoş Geldiniz Mesajı</label>
+                                        <InputTextArea id="daWelcomeMessage"
+                                                       @bind-Value="_domainAppearance.WelcomeMessage"
+                                                       class="form-control"
+                                                       rows="4" />
+                                    </div>
+
+                                    <h3 class="subsection-title">⚡️ Hazır Mesajlar</h3>
+                                    <p class="subsection-description">Bu domain için özel quick reply mesajları. Her satır bir buton.</p>
+                                    <div class="form-group">
+                                        <label for="daQuickReplies">Hazır Mesaj Listesi</label>
+                                        <InputTextArea id="daQuickReplies"
+                                                       @bind-Value="_domainQuickRepliesText"
+                                                       class="form-control"
+                                                       rows="3" />
+                                        <small class="form-text">Her satır ayrı bir hazır mesaj olacak. Örnek: "Konumuma yakın bayileri arıyorum"</small>
+                                    </div>
+
+                                    <h3 class="subsection-title">💬 Hazır Cevaplar</h3>
+                                    <p class="subsection-description">Kullanıcıların belirli sorularına verilecek hazır cevapları düzenleyin</p>
+
+                                    <div class="form-group">
+                                        <label for="daGreetingResponse">Selamlama Cevabı</label>
+                                        <InputTextArea id="daGreetingResponse"
+                                                       @bind-Value="_domainAppearance.GreetingResponse"
+                                                       class="form-control"
+                                                       rows="2" />
+                                        <small class="form-text">"Merhaba", "Selam" gibi selamlamalara verilecek cevap</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="daHowAreYouResponse">Nasılsın Cevabı</label>
+                                        <InputTextArea id="daHowAreYouResponse"
+                                                       @bind-Value="_domainAppearance.HowAreYouResponse"
+                                                       class="form-control"
+                                                       rows="2" />
+                                        <small class="form-text">"Nasılsın" sorularına verilecek cevap</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="daWhoAreYouResponse">Kimsin Cevabı</label>
+                                        <InputTextArea id="daWhoAreYouResponse"
+                                                       @bind-Value="_domainAppearance.WhoAreYouResponse"
+                                                       class="form-control"
+                                                       rows="2" />
+                                        <small class="form-text">"Kimsin" sorularına verilecek cevap</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="daWhatCanYouDoResponse">Ne Yapabilirsin Cevabı</label>
+                                        <InputTextArea id="daWhatCanYouDoResponse"
+                                                       @bind-Value="_domainAppearance.WhatCanYouDoResponse"
+                                                       class="form-control"
+                                                       rows="3" />
+                                        <small class="form-text">"Ne yapabilirsin" sorularına verilecek cevap</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="daThanksResponse">Teşekkür Cevabı</label>
+                                        <InputTextArea id="daThanksResponse"
+                                                       @bind-Value="_domainAppearance.ThanksResponse"
+                                                       class="form-control"
+                                                       rows="2" />
+                                        <small class="form-text">"Teşekkür" mesajlarına verilecek cevap</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="daGoodbyeResponse">Veda Cevabı</label>
+                                        <InputTextArea id="daGoodbyeResponse"
+                                                       @bind-Value="_domainAppearance.GoodbyeResponse"
+                                                       class="form-control"
+                                                       rows="2" />
+                                        <small class="form-text">"Güle güle", "Hoşça kal" gibi vedalara verilecek cevap</small>
+                                    </div>
+                                }
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">İptal</button>
+                                <button type="button" class="btn btn-primary" disabled="@_isSaving" @onclick="HandleSaveDomainAppearance">
+                                    @if (_isSaving)
+                                    {
+                                        <span>Saving...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>💾 Kaydet</span>
+                                    }
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </EditForm>
+
+        @if (_activeTab == "llm" && _isAuthenticated)
+        {
+            <div class="settings-info">
+                <h3>ℹ️ Current Configuration</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <strong>Provider:</strong> @_settings.LlmProvider
+                    </div>
+                    <div class="info-item">
+                        <strong>Model:</strong> @_settings.ModelName
+                    </div>
+                    @if (_settings.LlmProvider == "Ollama")
+                    {
+                        <div class="info-item">
+                            <strong>Ollama URL:</strong> @_settings.OllamaBaseUrl
+                        </div>
+                    }
+                    <div class="info-item">
+                        <strong>Temperature:</strong> @_settings.Temperature.ToString("F2")
+                    </div>
+                    <div class="info-item">
+                        <strong>Max Tokens:</strong> @_settings.MaxTokens
+                    </div>
+                    <div class="info-item">
+                        <strong>Last Updated:</strong> @_settings.UpdatedAt.ToString("g")
+                    </div>
+                </div>
+            </div>
+        }
+        } <!-- end of _isAuthenticated else -->
+    </div>
+</div>
+
+@code {
+    private AdminSettings _settings = new();
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private bool _isTestingConnection = false;
+    private bool _showSuccess = false;
+    private string _errorMessage = string.Empty;
+    private string _connectionStatus = string.Empty;
+    private List<string> _availableModels = new();
+    private string _activeTab = "llm";
+    private string _quickRepliesText = string.Empty;
+    private bool _isAuthenticated = false;
+    private LoginModel _loginModel = new();
+    private string _loginError = string.Empty;
+    private List<DomainApiKey> _domainKeys = new();
+    private bool _authChecked = false;
+    private string _selectedAppearanceDomain = string.Empty;
+    private DomainAppearance _domainAppearance = new();
+    private string _domainQuickRepliesText = string.Empty;
+    private bool _isDomainAppearanceLoading = false;
+    private bool _showEditModal = false;
+    private string _editingDomain = string.Empty;
+    private string _baseUrl = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _baseUrl = Configuration["BaseUrl"] ?? "https://chatdemo.bridgestone.com.tr";
+        await LoadSettings();
+        await LoadDomainKeys();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_isAuthenticated)
+        {
+            try
+            {
+                // Tarayıcı localStorage'dan admin oturum bilgisini oku
+                var flag = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "adminAuth");
+                if (flag == "1")
+                {
+                    _isAuthenticated = true;
+                }
+            }
+            catch
+            {
+                // localStorage kullanılamıyorsa sessizce devam et
+            }
+            _authChecked = true;
+            StateHasChanged();
+        }
+        else if (firstRender)
+        {
+            _authChecked = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadSettings()
+    {
+        try
+        {
+            _isLoading = true;
+            _settings = await AdminSettingsService.GetSettingsAsync();
+            _quickRepliesText = string.Join("\n", _settings.QuickReplies ?? new List<string>());
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load settings: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadDomainKeys()
+    {
+        try
+        {
+            _domainKeys = (await DomainApiKeyService.GetAllAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load domain keys: {ex.Message}";
+        }
+    }
+
+    private async Task HandleEditDomain(string domain)
+    {
+        _editingDomain = domain;
+        _showEditModal = true;
+        await LoadDomainAppearance(domain);
+    }
+
+    private void CloseEditModal()
+    {
+        _showEditModal = false;
+        _editingDomain = string.Empty;
+        _domainAppearance = new();
+        _domainQuickRepliesText = string.Empty;
+    }
+
+    private async Task HandleCopyScript(string domain, string apiKey)
+    {
+        var script = $@"<script>
+    window.BridgestoneChatbotConfig = {{
+        baseUrl: '{_baseUrl}',
+        apiKey: '{apiKey}',
+        domain: '{domain}',
+        delay: 2000
+    }};
+</script>
+<script src=""{_baseUrl}/chatbot-embed.js""></script>";
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", script);
+            await JSRuntime.InvokeVoidAsync("alert", "Embed script kopyalandı! HTML sayfanızın </body> etiketinden önce yapıştırın.");
+        }
+        catch
+        {
+            // Fallback: prompt ile göster
+            await JSRuntime.InvokeVoidAsync("prompt", "Embed Script (Ctrl+C ile kopyalayın):", script);
+        }
+    }
+
+    private async Task HandleProviderChange()
+    {
+        _connectionStatus = string.Empty;
+        _availableModels.Clear();
+        StateHasChanged();
+    }
+
+    private async Task HandleTestConnection()
+    {
+        if (string.IsNullOrWhiteSpace(_settings.OllamaBaseUrl))
+        {
+            _errorMessage = "Please enter Ollama Base URL first.";
+            return;
+        }
+
+        try
+        {
+            _isTestingConnection = true;
+            _connectionStatus = string.Empty;
+            _errorMessage = string.Empty;
+            _availableModels.Clear();
+            StateHasChanged();
+
+            var isConnected = await OllamaService.TestConnectionAsync(_settings.OllamaBaseUrl);
+            
+            if (isConnected)
+            {
+                _connectionStatus = "success";
+                _availableModels = await OllamaService.GetAvailableModelsAsync(_settings.OllamaBaseUrl);
+                
+                // Auto-select first model if none selected
+                if (_availableModels.Any() && string.IsNullOrWhiteSpace(_settings.ModelName))
+                {
+                    _settings.ModelName = _availableModels.First();
+                }
+            }
+            else
+            {
+                _connectionStatus = "error";
+                _errorMessage = "Failed to connect to Ollama server. Please check the URL and ensure the server is running.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _connectionStatus = "error";
+            _errorMessage = $"Connection error: {ex.Message}";
+        }
+        finally
+        {
+            _isTestingConnection = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSave()
+    {
+        try
+        {
+            _isSaving = true;
+            _showSuccess = false;
+            _errorMessage = string.Empty;
+
+            // Persist quick replies from multiline input
+            _settings.QuickReplies = _quickRepliesText
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(q => q.Trim())
+                .Where(q => !string.IsNullOrWhiteSpace(q))
+                .Distinct()
+                .ToList();
+
+            await AdminSettingsService.SaveSettingsAsync(_settings);
+            _showSuccess = true;
+
+            // Hide success message after 3 seconds
+            await Task.Delay(3000);
+            _showSuccess = false;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to save settings: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        _activeTab = tab;
+    }
+
+    private async Task HandleReset()
+    {
+        _settings = new AdminSettings
+        {
+            LlmProvider = "Ollama",
+            ModelName = "hermes3:8b",
+            ApiKey = string.Empty,
+            OllamaBaseUrl = "http://3.14.208.235:11434",
+            SystemPrompt = "You are a helpful assistant for Bridgestone tire and dealer information. When users ask about dealers or tires, you should help them find the information they need.",
+            Temperature = 0.7,
+            MaxTokens = 2000
+        };
+        _connectionStatus = string.Empty;
+        _availableModels.Clear();
+    }
+
+    private async Task HandleResetAppearance()
+    {
+        _settings.ChatbotName = "Bridgestone Chatbot";
+        _settings.ChatbotLogoUrl = string.Empty;
+        _settings.PrimaryColor = "#000000";
+        _settings.SecondaryColor = "#dc143c";
+        _settings.WelcomeMessage = "Merhaba! Bridgestone chatbot'una hoş geldiniz. Size nasıl yardımcı olabilirim?\n\nÖrnek sorular:\n• En yakın bayi nerede?\n• İstanbul Kadıköy'de bayi var mı?\n• 2021 Corolla için yaz lastiği öner";
+        _settings.ChatbotOnline = true;
+        _settings.QuickReplies = new List<string> { "Konumuma yakın bayileri arıyorum" };
+        _quickRepliesText = string.Join("\n", _settings.QuickReplies);
+        _settings.GreetingResponse = "Merhaba! Bridgestone chatbot'una hoş geldiniz. Size nasıl yardımcı olabilirim?";
+        _settings.HowAreYouResponse = "Teşekkür ederim, iyiyim! Size nasıl yardımcı olabilirim? Bridgestone bayileri, lastik önerileri veya başka bir konuda bilgi verebilirim.";
+        _settings.WhoAreYouResponse = "Ben Bridgestone'un dijital asistanıyım. Size yakın bayileri bulma, araçınıza uygun lastik önerileri sunma ve Bridgestone hakkında bilgi verme konularında yardımcı olabilirim. Nasıl yardımcı olabilirim?";
+        _settings.WhatCanYouDoResponse = "Size şu konularda yardımcı olabilirim:\n\n📍 Yakınınızdaki Bridgestone bayilerini bulma\n🏙️ Şehir/ilçe bazında bayi arama\n🚗 Araçınıza uygun lastik önerileri\nℹ️ Bridgestone hakkında genel bilgiler\n\nNasıl yardımcı olabilirim?";
+        _settings.ThanksResponse = "Rica ederim! Başka bir konuda yardımcı olabilir miyim?";
+        _settings.GoodbyeResponse = "Hoşça kalın! İyi günler dilerim. İhtiyacınız olduğunda buradayım!";
+    }
+
+    private async Task HandleLogin()
+    {
+        _loginError = string.Empty;
+
+        // Basit: appsettings.json üzerinden beklenen kullanıcı adı/şifreyi al
+        var expectedUser = Configuration["AdminAuth:Username"] ?? "admin";
+        var expectedPass = Configuration["AdminAuth:Password"] ?? "admin123!";
+
+        if (string.Equals(_loginModel.Username, expectedUser, StringComparison.OrdinalIgnoreCase) &&
+            _loginModel.Password == expectedPass)
+        {
+            _isAuthenticated = true;
+            _authChecked = true;
+
+            try
+            {
+                // Başarılı girişten sonra tarayıcıda oturum bilgisini sakla
+                await JSRuntime.InvokeVoidAsync("localStorage.setItem", "adminAuth", "1");
+            }
+            catch
+            {
+                // localStorage hatası olursa sessiz geç
+            }
+        }
+        else
+        {
+            _loginError = "Kullanıcı adı veya şifre hatalı.";
+        }
+    }
+
+    private async Task HandleNewDomainKey()
+    {
+        try
+        {
+            var domain = await JSRuntime.InvokeAsync<string>("prompt", "Domain adını girin (örnek: example.com):");
+            if (string.IsNullOrWhiteSpace(domain))
+                return;
+
+            await DomainApiKeyService.CreateAsync(domain);
+            await LoadDomainKeys();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Yeni anahtar oluşturulamadı: {ex.Message}";
+        }
+    }
+
+    private async Task HandleDeleteDomainKey(string id)
+    {
+        try
+        {
+            var confirm = await JSRuntime.InvokeAsync<bool>("confirm", "Bu API key'i silmek istediğinize emin misiniz?");
+            if (!confirm) return;
+
+            await DomainApiKeyService.DeleteAsync(id);
+            await LoadDomainKeys();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Anahtar silinemedi: {ex.Message}";
+        }
+    }
+
+    private async Task LoadDomainAppearance(string domain)
+    {
+        _isDomainAppearanceLoading = true;
+        try
+        {
+            var appearance = await DomainAppearanceService.GetAsync(domain);
+            if (appearance != null)
+            {
+                _domainAppearance = appearance;
+            }
+            else
+            {
+                var defaults = await AdminSettingsService.GetSettingsAsync();
+                _domainAppearance = new DomainAppearance
+                {
+                    Domain = domain,
+                    ChatbotName = defaults.ChatbotName,
+                    ChatbotLogoUrl = defaults.ChatbotLogoUrl,
+                    PrimaryColor = defaults.PrimaryColor,
+                    SecondaryColor = defaults.SecondaryColor,
+                    WelcomeMessage = defaults.WelcomeMessage,
+                    ChatbotOnline = defaults.ChatbotOnline,
+                    OpenChatOnLoad = defaults.OpenChatOnLoad,
+                    QuickReplies = defaults.QuickReplies ?? new List<string>(),
+                    GreetingResponse = defaults.GreetingResponse,
+                    HowAreYouResponse = defaults.HowAreYouResponse,
+                    WhoAreYouResponse = defaults.WhoAreYouResponse,
+                    WhatCanYouDoResponse = defaults.WhatCanYouDoResponse,
+                    ThanksResponse = defaults.ThanksResponse,
+                    GoodbyeResponse = defaults.GoodbyeResponse
+                };
+            }
+
+            _domainQuickRepliesText = string.Join("\n", _domainAppearance.QuickReplies ?? new List<string>());
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Domain görünümü yüklenemedi: {ex.Message}";
+        }
+        finally
+        {
+            _isDomainAppearanceLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSaveDomainAppearance()
+    {
+        if (string.IsNullOrWhiteSpace(_editingDomain))
+        {
+            _errorMessage = "Lütfen bir domain seçin.";
+            return;
+        }
+
+        try
+        {
+            _isSaving = true;
+            _showSuccess = false;
+            _errorMessage = string.Empty;
+
+            _domainAppearance.Domain = _editingDomain;
+            _domainAppearance.QuickReplies = _domainQuickRepliesText
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(q => q.Trim())
+                .Where(q => !string.IsNullOrWhiteSpace(q))
+                .Distinct()
+                .ToList();
+
+            await DomainAppearanceService.SaveAsync(_domainAppearance);
+            _showSuccess = true;
+
+            await Task.Delay(1500);
+            _showSuccess = false;
+            CloseEditModal();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Domain görünümü kaydedilemedi: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private class LoginModel
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}
+
+<style>
+    .admin-wrapper {
+        height: 100vh;
+        padding: 1rem;
+        background: #f5f5f5;
+        overflow-y: auto;
+        overflow-x: hidden;
+        position: relative;
+    }
+
+    .admin-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+
+    .admin-header {
+        text-align: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    .login-card {
+        max-width: 400px;
+        margin: 2rem auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        text-align: left;
+    }
+
+    .login-card h2 {
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+    }
+
+    .admin-header h1 {
+        margin: 0;
+        color: #333;
+        font-size: 2rem;
+    }
+
+    .subtitle {
+        color: #666;
+        margin-top: 0.5rem;
+    }
+
+    .loading-container {
+        text-align: center;
+        padding: 3rem;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #007bff;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    @@keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .alert {
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 1.5rem;
+    }
+
+    .alert-success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+
+    .alert-error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .settings-form {
+        margin-bottom: 2rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 1rem;
+        transition: border-color 0.3s;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+    }
+
+    .input-with-button {
+        display: flex;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+
+    .input-with-button .form-control {
+        flex: 1;
+    }
+
+    .btn-test {
+        padding: 0.75rem 1rem;
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.3s;
+    }
+
+    .btn-test:hover:not(:disabled) {
+        background-color: #218838;
+    }
+
+    .btn-test:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .connection-status {
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        border-radius: 4px;
+        font-size: 0.875rem;
+    }
+
+    .connection-status.success {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .connection-status.error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .system-prompt {
+        font-family: 'Courier New', monospace;
+        resize: vertical;
+    }
+
+    .form-text {
+        display: block;
+        margin-top: 0.25rem;
+        font-size: 0.875rem;
+        color: #666;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        border-top: 1px solid #e0e0e0;
+        background: white;
+    }
+
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 6px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .btn-primary {
+        background-color: #007bff;
+        color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background-color: #0056b3;
+    }
+
+    .btn-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .btn-secondary {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background-color: #545b62;
+    }
+
+    .settings-info {
+        margin-top: 2rem;
+        padding: 1.5rem;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .settings-info h3 {
+        margin-top: 0;
+        margin-bottom: 1rem;
+        color: #333;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+
+    .info-item {
+        padding: 0.5rem;
+        background: white;
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+
+    .validation-message {
+        color: #dc3545;
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab-button {
+        padding: 0.75rem 1.5rem;
+        background: transparent;
+        border: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 500;
+        color: #666;
+        transition: all 0.3s;
+        margin-bottom: -2px;
+    }
+
+    .tab-button:hover {
+        color: #333;
+        background: rgba(0, 0, 0, 0.05);
+    }
+
+    .tab-button.active {
+        color: #007bff;
+        border-bottom-color: #007bff;
+        font-weight: 600;
+    }
+
+    .section-title {
+        margin-top: 0;
+        margin-bottom: 1.5rem;
+        color: #333;
+        font-size: 1.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    .subsection-title {
+        margin-top: 2rem;
+        margin-bottom: 0.5rem;
+        color: #333;
+        font-size: 1.25rem;
+    }
+
+    .subsection-description {
+        color: #666;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+    }
+
+    .color-input {
+        height: 50px;
+        padding: 0.25rem;
+        cursor: pointer;
+    }
+
+    .domain-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1.5rem;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .domain-table thead {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+    }
+
+    .domain-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .domain-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .domain-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .api-key-code {
+        background: #f5f5f5;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-family: 'Courier New', monospace;
+        color: #333;
+        word-break: break-all;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .status-badge.active {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .status-badge.inactive {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-edit {
+        background-color: #17a2b8;
+        color: white;
+    }
+
+    .btn-edit:hover:not(:disabled) {
+        background-color: #138496;
+    }
+
+    .btn-info {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .btn-info:hover:not(:disabled) {
+        background-color: #5a6268;
+    }
+
+    .btn-sm {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.875rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-top: 1.5rem;
+    }
+
+    .space-between {
+        justify-content: space-between;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        padding: 1rem;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        max-width: 700px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 2px solid #e0e0e0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+    }
+
+    .modal-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+    }
+
+    .modal-close {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: all 0.2s;
+    }
+
+    .modal-close:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .modal-footer {
+        padding: 1.5rem;
+        border-top: 2px solid #e0e0e0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        background: #f8f9fa;
+    }
+
+    .inline-checkbox {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .inline-checkbox label {
+        margin: 0;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+    .form-checkbox {
+        margin-top: 0.25rem;
+        cursor: pointer;
+    }
+</style>
