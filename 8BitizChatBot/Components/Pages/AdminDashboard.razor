@@ -7,6 +7,9 @@
 @inject IOllamaService OllamaService
 @inject IDomainApiKeyService DomainApiKeyService
 @inject IDomainAppearanceService DomainAppearanceService
+@inject IUserService UserService
+@inject IAuditLogService AuditLogService
+@inject IAnalyticsService AnalyticsService
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
 @rendermode RenderMode.InteractiveServer
@@ -56,14 +59,23 @@
         </div>
 
         <div class="tabs">
-            <button class="tab-button @(_activeTab == "llm" ? "active" : "")" @onclick='() => SetActiveTab("llm")'>
+            <button class="tab-button @(_activeTab == "llm" ? "active" : "")" @onclick='async () => await SetActiveTab("llm")'>
                 🤖 LLM Settings
             </button>
-            <button class="tab-button @(_activeTab == "appearance" ? "active" : "")" @onclick='() => SetActiveTab("appearance")'>
+            <button class="tab-button @(_activeTab == "appearance" ? "active" : "")" @onclick='async () => await SetActiveTab("appearance")'>
                 🎨 Chatbot Appearance
             </button>
-            <button class="tab-button @(_activeTab == "domains" ? "active" : "")" @onclick='() => SetActiveTab("domains")'>
+            <button class="tab-button @(_activeTab == "domains" ? "active" : "")" @onclick='async () => await SetActiveTab("domains")'>
                 🌐 Domain & API Keys
+            </button>
+            <button class="tab-button @(_activeTab == "users" ? "active" : "")" @onclick='async () => await SetActiveTab("users")'>
+                👥 Kullanıcı Yönetimi
+            </button>
+            <button class="tab-button @(_activeTab == "logs" ? "active" : "")" @onclick='async () => await SetActiveTab("logs")'>
+                📋 Audit Logs
+            </button>
+            <button class="tab-button @(_activeTab == "analytics" ? "active" : "")" @onclick='async () => await SetActiveTab("analytics")'>
+                📊 Analytics
             </button>
         </div>
 
@@ -430,7 +442,8 @@
 
                     @if (_domainKeys.Any())
                     {
-                        <table class="table domain-table">
+                        <div class="table-container-modern">
+                            <table class="table-modern">
                             <thead>
                                 <tr>
                                     <th>Domain</th>
@@ -477,10 +490,12 @@
                                 }
                             </tbody>
                         </table>
+                        </div>
                     }
                     else
                     {
-                        <div class="empty-state">
+                        <div class="empty-state-modern">
+                            <div class="empty-icon">🌐</div>
                             <p>Henüz tanımlanmış bir domain yok. Yeni bir anahtar oluşturmak için <strong>New Key</strong> butonuna tıklayın.</p>
                         </div>
                     }
@@ -676,6 +691,693 @@
                 </div>
             </div>
         }
+            else if (_activeTab == "users")
+            {
+                <div class="settings-form">
+                    <h2 class="section-title">👥 Kullanıcı Yönetimi</h2>
+                    <p class="subsection-description">
+                        Admin kullanıcılarını yönetebilir, yeni kullanıcı ekleyebilir, şifre değiştirebilir ve kullanıcıları aktif/pasif yapabilirsiniz.
+                    </p>
+
+                    <div class="form-actions space-between">
+                        <button type="button" class="btn btn-primary" @onclick="ShowAddUserModal">+ Yeni Kullanıcı</button>
+                    </div>
+
+                    @if (_users.Any())
+                    {
+                        <div class="table-container-modern">
+                            <table class="table-modern">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" @onclick='() => SortUsers("username")'>
+                                            👤 Kullanıcı Adı
+                                            <span class="sort-indicator">@(_userSortBy == "username" ? (_userSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                        <th class="sortable" @onclick='() => SortUsers("name")'>
+                                            📝 Ad Soyad
+                                            <span class="sort-indicator">@(_userSortBy == "name" ? (_userSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                        <th>📧 Email</th>
+                                        <th class="sortable" @onclick='() => SortUsers("admin")'>
+                                            🔑 Yetki
+                                            <span class="sort-indicator">@(_userSortBy == "admin" ? (_userSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                        <th class="sortable" @onclick='() => SortUsers("status")'>
+                                            ✅ Durum
+                                            <span class="sort-indicator">@(_userSortBy == "status" ? (_userSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                        <th class="sortable" @onclick='() => SortUsers("login")'>
+                                            🕐 Son Giriş
+                                            <span class="sort-indicator">@(_userSortBy == "login" ? (_userSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                        <th>⚙️ İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var user in GetSortedUsers())
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="user-cell">
+                                                    <strong class="user-name">@user.Username</strong>
+                                                    <div class="user-meta">ID: @user.Id</div>
+                                                </div>
+                                            </td>
+                                            <td>@(user.FullName ?? "-")</td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(user.Email))
+                                                {
+                                                    <a href="mailto:@user.Email" class="email-link">@user.Email</a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">-</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="role-badge @(user.IsAdmin ? "admin" : "user")">
+                                                    @(user.IsAdmin ? "👑 Admin" : "👤 User")
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @if (user.LockedUntil.HasValue && user.LockedUntil.Value > DateTime.UtcNow)
+                                                {
+                                                    <span class="status-badge-modern locked">
+                                                        <span class="status-icon">🔒</span>
+                                                        <span>Kilitli</span>
+                                                        <div class="lock-info">@((int)(user.LockedUntil.Value - DateTime.UtcNow).TotalMinutes) dk kaldı</div>
+                                                    </span>
+                                                }
+                                                else if (user.IsActive)
+                                                {
+                                                    <span class="status-badge-modern success">
+                                                        <span class="status-icon">✓</span>
+                                                        <span>Aktif</span>
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="status-badge-modern error">
+                                                        <span class="status-icon">✗</span>
+                                                        <span>Pasif</span>
+                                                    </span>
+                                                }
+                                            </td>
+                                            <td class="date-cell">
+                                                @if (user.LastLoginAt.HasValue)
+                                                {
+                                                    <div class="date-primary">@user.LastLoginAt.Value.ToLocalTime().ToString("dd MMM yyyy")</div>
+                                                    <div class="date-secondary">@user.LastLoginAt.Value.ToLocalTime().ToString("HH:mm")</div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">Hiç giriş yapmamış</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="action-buttons-modern">
+                                                    <button type="button"
+                                                            class="btn-action btn-edit"
+                                                            @onclick="() => ShowEditUserModal(user)"
+                                                            title="Düzenle">
+                                                        ✏️
+                                                    </button>
+                                                    @if (user.LockedUntil.HasValue && user.LockedUntil.Value > DateTime.UtcNow)
+                                                    {
+                                                        <button type="button"
+                                                                class="btn-action btn-unlock"
+                                                                @onclick="() => HandleUnlockUser(user.Id)"
+                                                                title="Kilidi Aç">
+                                                            🔓
+                                                        </button>
+                                                    }
+                                                    @if (user.Id != _currentUser?.Id)
+                                                    {
+                                                        <button type="button"
+                                                                class="btn-action btn-delete"
+                                                                @onclick="() => HandleDeleteUser(user.Id)"
+                                                                title="Sil">
+                                                            🗑️
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-state-modern">
+                            <div class="empty-icon">👤</div>
+                            <p>Henüz kullanıcı bulunmuyor.</p>
+                        </div>
+                    }
+                </div>
+
+                @* Add/Edit User Modal *@
+                @if (_showUserModal)
+                {
+                    <div class="modal-overlay" @onclick="CloseUserModal">
+                        <div class="modal-content" @onclick:stopPropagation="true">
+                            <div class="modal-header">
+                                <h3>@(_editingUser == null ? "➕ Yeni Kullanıcı" : "✏️ Kullanıcı Düzenle")</h3>
+                                <button type="button" class="modal-close" @onclick="CloseUserModal">✕</button>
+                            </div>
+                            <div class="modal-body">
+                                <EditForm Model="@_userFormModel" OnValidSubmit="@(_editingUser == null ? HandleCreateUser : HandleUpdateUser)">
+                                    <DataAnnotationsValidator />
+                                    <div class="form-group">
+                                        <label>Kullanıcı Adı</label>
+                                        <InputText @bind-Value="_userFormModel.Username" class="form-control" disabled="@(_editingUser != null)" />
+                                        <ValidationMessage For="@(() => _userFormModel.Username)" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Ad Soyad</label>
+                                        <InputText @bind-Value="_userFormModel.FullName" class="form-control" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Email</label>
+                                        <InputText @bind-Value="_userFormModel.Email" class="form-control" type="email" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Şifre @(_editingUser != null ? "(Değiştirmek için doldurun)" : "")</label>
+                                        <InputText @bind-Value="_userFormModel.Password" class="form-control" type="password" />
+                                        <small class="form-text">En az 8 karakter, büyük harf, küçük harf ve rakam içermelidir.</small>
+                                    </div>
+                                    <div class="form-group inline-checkbox">
+                                        <InputCheckbox @bind-Value="_userFormModel.IsAdmin" class="form-checkbox" />
+                                        <label>Admin Yetkisi</label>
+                                    </div>
+                                    <div class="form-group inline-checkbox">
+                                        <InputCheckbox @bind-Value="_userFormModel.IsActive" class="form-checkbox" />
+                                        <label>Aktif</label>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(_userFormError))
+                                    {
+                                        <div class="alert alert-error">@_userFormError</div>
+                                    }
+                                    <div class="modal-footer">
+                                        <button type="submit" class="btn btn-primary" disabled="@_isSavingUser">
+                                            @if (_isSavingUser)
+                                            {
+                                                <span>Kaydediliyor...</span>
+                                            }
+                                            else
+                                            {
+                                                <span>💾 Kaydet</span>
+                                            }
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" @onclick="CloseUserModal">İptal</button>
+                                    </div>
+                                </EditForm>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else if (_activeTab == "logs")
+            {
+                <div class="settings-form">
+                    <h2 class="section-title">📋 Audit Logs</h2>
+                    <p class="subsection-description">
+                        Sistemdeki tüm admin işlemlerini ve giriş denemelerini görüntüleyebilirsiniz.
+                    </p>
+
+                    <div class="form-group">
+                        <label>Filtrele</label>
+                        <div class="filter-controls">
+                            <InputSelect @bind-Value="_logFilterAction" class="form-control" style="width: 200px;">
+                                <option value="">Tüm İşlemler</option>
+                                <option value="LoginSuccess">Başarılı Giriş</option>
+                                <option value="LoginFailed">Başarısız Giriş</option>
+                                <option value="AccountLocked">Hesap Kilitlendi</option>
+                                <option value="CreateUser">Kullanıcı Oluşturuldu</option>
+                                <option value="UpdateUser">Kullanıcı Güncellendi</option>
+                                <option value="DeleteUser">Kullanıcı Silindi</option>
+                                <option value="UpdateSettings">Ayarlar Güncellendi</option>
+                            </InputSelect>
+                            <button type="button" class="btn btn-secondary" @onclick="LoadAuditLogs">🔍 Filtrele</button>
+                        </div>
+                    </div>
+
+                    @if (_auditLogs.Any())
+                    {
+                        <div class="table-container-modern">
+                            <table class="table-modern">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" @onclick='() => SortAuditLogs("date")'>
+                                            📅 Tarih
+                                            <span class="sort-indicator">@(_auditSortBy == "date" ? (_auditSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                        <th class="sortable" @onclick='() => SortAuditLogs("user")'>
+                                            👤 Kullanıcı
+                                            <span class="sort-indicator">@(_auditSortBy == "user" ? (_auditSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                        <th class="sortable" @onclick='() => SortAuditLogs("action")'>
+                                            ⚡ İşlem
+                                            <span class="sort-indicator">@(_auditSortBy == "action" ? (_auditSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                        <th>📝 Detay</th>
+                                        <th>🌐 IP</th>
+                                        <th class="sortable" @onclick='() => SortAuditLogs("status")'>
+                                            ✅ Durum
+                                            <span class="sort-indicator">@(_auditSortBy == "status" ? (_auditSortAsc ? "↑" : "↓") : "")</span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var log in GetSortedAuditLogs())
+                                    {
+                                        <tr>
+                                            <td class="date-cell">
+                                                <div class="date-primary">@log.Timestamp.ToLocalTime().ToString("dd MMM yyyy")</div>
+                                                <div class="date-secondary">@log.Timestamp.ToLocalTime().ToString("HH:mm:ss")</div>
+                                            </td>
+                                            <td>
+                                                <div class="user-cell">
+                                                    <span class="user-name">@(log.Username ?? "Sistem")</span>
+                                                    @if (!string.IsNullOrEmpty(log.UserId))
+                                                    {
+                                                        <span class="user-id">ID: @log.UserId</span>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="action-badge action-@log.Action.ToLower().Replace(" ", "-")">@log.Action</span>
+                                            </td>
+                                            <td class="detail-cell">
+                                                <div class="detail-text" title="@log.Details">@(log.Details?.Length > 50 ? log.Details.Substring(0, 50) + "..." : log.Details ?? "-")</div>
+                                                @if (!string.IsNullOrEmpty(log.ErrorMessage))
+                                                {
+                                                    <div class="error-detail">⚠️ @log.ErrorMessage</div>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="ip-badge">@(log.IpAddress ?? "-")</span>
+                                            </td>
+                                            <td>
+                                                <span class="status-badge-modern @(log.Success ? "success" : "error")">
+                                                    @if (log.Success)
+                                                    {
+                                                        <span class="status-icon">✓</span>
+                                                        <span>Başarılı</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="status-icon">✗</span>
+                                                        <span>Başarısız</span>
+                                                    }
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-state-modern">
+                            <div class="empty-icon">📋</div>
+                            <p>Henüz log kaydı bulunmuyor.</p>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_activeTab == "analytics")
+            {
+                <div class="tab-content analytics-dashboard">
+                    <div class="analytics-header">
+                        <div>
+                            <h2>📊 Analytics Dashboard</h2>
+                            <p class="analytics-subtitle">Detaylı konuşma ve kullanıcı istatistikleri</p>
+                        </div>
+                        <div class="analytics-actions">
+                            <button type="button" class="btn btn-secondary" @onclick="ExportAnalytics">📥 Export</button>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-filters">
+                        <div class="filter-group">
+                            <label>📅 Zaman Aralığı</label>
+                            <InputSelect @bind-Value="_analyticsPeriod" class="form-control modern-select">
+                                <option value="7">Son 7 Gün</option>
+                                <option value="30">Son 30 Gün</option>
+                                <option value="90">Son 90 Gün</option>
+                                <option value="365">Son 1 Yıl</option>
+                            </InputSelect>
+                        </div>
+                        <div class="filter-group">
+                            <label>🌐 Domain</label>
+                            <InputSelect @bind-Value="_analyticsDomain" class="form-control modern-select">
+                                <option value="">Tüm Domainler</option>
+                                @foreach (var key in _domainKeys)
+                                {
+                                    <option value="@key.Domain">@key.Domain</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="filter-group">
+                            <label>&nbsp;</label>
+                            <button type="button" class="btn btn-primary btn-refresh" @onclick="LoadAnalytics">
+                                <span class="btn-icon">🔄</span> Yenile
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (_analyticsStats != null)
+                    {
+                        <div class="stats-grid-modern">
+                            <div class="stat-card-modern stat-primary">
+                                <div class="stat-header">
+                                    <div class="stat-icon-modern">💬</div>
+                                    <div class="stat-trend">
+                                        <span class="trend-up">↗</span>
+                                    </div>
+                                </div>
+                                <div class="stat-body">
+                                    <div class="stat-value-modern">@_analyticsStats.TotalConversations.ToString("N0")</div>
+                                    <div class="stat-label-modern">Toplam Konuşma</div>
+                                    <div class="stat-period">@_analyticsStats.StartDate.ToLocalTime().ToString("dd MMM") - @_analyticsStats.EndDate.ToLocalTime().ToString("dd MMM yyyy")</div>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card-modern stat-success">
+                                <div class="stat-header">
+                                    <div class="stat-icon-modern">📨</div>
+                                    <div class="stat-trend">
+                                        <span class="trend-up">↗</span>
+                                    </div>
+                                </div>
+                                <div class="stat-body">
+                                    <div class="stat-value-modern">@_analyticsStats.TotalMessages.ToString("N0")</div>
+                                    <div class="stat-label-modern">Toplam Mesaj</div>
+                                    <div class="stat-detail">@_analyticsStats.UserMessages kullanıcı, @_analyticsStats.BotMessages bot</div>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card-modern stat-info">
+                                <div class="stat-header">
+                                    <div class="stat-icon-modern">👤</div>
+                                    <div class="stat-trend">
+                                        <span class="trend-up">↗</span>
+                                    </div>
+                                </div>
+                                <div class="stat-body">
+                                    <div class="stat-value-modern">@_analyticsStats.UniqueUsers.ToString("N0")</div>
+                                    <div class="stat-label-modern">Benzersiz Kullanıcı</div>
+                                    <div class="stat-detail">@((_analyticsStats.TotalConversations > 0 ? (double)_analyticsStats.UniqueUsers / _analyticsStats.TotalConversations * 100 : 0).ToString("F1"))% aktiflik oranı</div>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card-modern stat-warning">
+                                <div class="stat-header">
+                                    <div class="stat-icon-modern">📊</div>
+                                    <div class="stat-trend">
+                                        <span class="trend-neutral">→</span>
+                                    </div>
+                                </div>
+                                <div class="stat-body">
+                                    <div class="stat-value-modern">@_analyticsStats.AverageMessagesPerConversation.ToString("F1")</div>
+                                    <div class="stat-label-modern">Ortalama Mesaj/Konuşma</div>
+                                    <div class="stat-detail">@_analyticsStats.UserMessages kullanıcı mesajı</div>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card-modern stat-secondary">
+                                <div class="stat-header">
+                                    <div class="stat-icon-modern">⚡</div>
+                                    <div class="stat-trend">
+                                        <span class="trend-up">↗</span>
+                                    </div>
+                                </div>
+                                <div class="stat-body">
+                                    <div class="stat-value-modern">@_analyticsStats.UserMessages.ToString("N0")</div>
+                                    <div class="stat-label-modern">Kullanıcı Mesajları</div>
+                                    <div class="stat-detail">@((_analyticsStats.TotalMessages > 0 ? (double)_analyticsStats.UserMessages / _analyticsStats.TotalMessages * 100 : 0).ToString("F1"))% toplam mesaj</div>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card-modern stat-dark">
+                                <div class="stat-header">
+                                    <div class="stat-icon-modern">🤖</div>
+                                    <div class="stat-trend">
+                                        <span class="trend-up">↗</span>
+                                    </div>
+                                </div>
+                                <div class="stat-body">
+                                    <div class="stat-value-modern">@_analyticsStats.BotMessages.ToString("N0")</div>
+                                    <div class="stat-label-modern">Bot Mesajları</div>
+                                    <div class="stat-detail">@((_analyticsStats.TotalMessages > 0 ? (double)_analyticsStats.BotMessages / _analyticsStats.TotalMessages * 100 : 0).ToString("F1"))% toplam mesaj</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="analytics-section-modern">
+                            <div class="section-header">
+                                <h3>📈 Günlük Konuşma Trendi</h3>
+                                <div class="section-actions">
+                                    <span class="section-info">@_dailyStats.Count günlük veri</span>
+                                </div>
+                            </div>
+                            @if (_dailyStats.Any())
+                            {
+                                <div class="chart-container-modern">
+                                    <div class="chart-wrapper">
+                                        <div class="bar-chart">
+                                            @foreach (var stat in _dailyStats.TakeLast(30))
+                                            {
+                                                var maxCount = _dailyStats.Max(s => s.ConversationCount);
+                                                var height = maxCount > 0 ? (stat.ConversationCount * 100.0 / maxCount) : 0;
+                                                <div class="bar-item" title="@stat.Date.ToLocalTime().ToString("dd MMM yyyy"): @stat.ConversationCount konuşma">
+                                                    <div class="bar-fill" style="height: @($"{height:F1}%")"></div>
+                                                    <div class="bar-label">@stat.Date.ToLocalTime().ToString("dd")</div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="chart-table-wrapper">
+                                        <table class="table-modern">
+                                            <thead>
+                                                <tr>
+                                                    <th class="sortable" @onclick='() => SortDailyStats("date")'>
+                                                        Tarih
+                                                        <span class="sort-indicator">@(_dailySortBy == "date" ? (_dailySortAsc ? "↑" : "↓") : "")</span>
+                                                    </th>
+                                                    <th class="sortable" @onclick='() => SortDailyStats("count")'>
+                                                        Konuşma Sayısı
+                                                        <span class="sort-indicator">@(_dailySortBy == "count" ? (_dailySortAsc ? "↑" : "↓") : "")</span>
+                                                    </th>
+                                                    <th>Trend</th>
+                                                    <th>Grafik</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var stat in GetSortedDailyStats())
+                                                {
+                                                    var maxCount = _dailyStats.Max(s => s.ConversationCount);
+                                                    var percentage = maxCount > 0 ? (stat.ConversationCount * 100.0 / maxCount) : 0;
+                                                    var prevStat = _dailyStats.FirstOrDefault(s => s.Date < stat.Date);
+                                                    var trend = prevStat != null ? (stat.ConversationCount > prevStat.ConversationCount ? "up" : stat.ConversationCount < prevStat.ConversationCount ? "down" : "neutral") : "neutral";
+                                                    var trendValue = prevStat != null ? Math.Abs(stat.ConversationCount - prevStat.ConversationCount) : 0;
+                                                    <tr>
+                                                        <td class="date-cell">@stat.Date.ToLocalTime().ToString("dd MMM yyyy, dddd")</td>
+                                                        <td class="number-cell">
+                                                            <strong>@stat.ConversationCount.ToString("N0")</strong>
+                                                        </td>
+                                                        <td class="trend-cell">
+                                                            @if (trend == "up")
+                                                            {
+                                                                <span class="trend-badge trend-up">↗ +@trendValue</span>
+                                                            }
+                                                            else if (trend == "down")
+                                                            {
+                                                                <span class="trend-badge trend-down">↘ -@trendValue</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="trend-badge trend-neutral">→</span>
+                                                            }
+                                                        </td>
+                                                        <td>
+                                                            <div class="progress-bar-modern">
+                                                                <div class="progress-fill" style="width: @($"{percentage:F1}%")"></div>
+                                                                <span class="progress-text">@($"{percentage:F0}%")</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="analytics-section-modern">
+                            <div class="section-header">
+                                <h3>🔥 Popüler Sorular</h3>
+                                <div class="section-actions">
+                                    <InputText @bind-Value="_questionSearch" placeholder="🔍 Soru ara..." class="search-input" />
+                                </div>
+                            </div>
+                            @if (_popularQuestions.Any())
+                            {
+                                <div class="table-container-modern">
+                                    <table class="table-modern">
+                                        <thead>
+                                            <tr>
+                                                <th class="sortable" @onclick='() => SortQuestions("question")'>
+                                                    Soru
+                                                    <span class="sort-indicator">@(_questionSortBy == "question" ? (_questionSortAsc ? "↑" : "↓") : "")</span>
+                                                </th>
+                                                <th class="sortable number-col" @onclick='() => SortQuestions("count")'>
+                                                    Tekrar Sayısı
+                                                    <span class="sort-indicator">@(_questionSortBy == "count" ? (_questionSortAsc ? "↑" : "↓") : "")</span>
+                                                </th>
+                                                <th class="sortable" @onclick='() => SortQuestions("date")'>
+                                                    Son Sorulma
+                                                    <span class="sort-indicator">@(_questionSortBy == "date" ? (_questionSortAsc ? "↑" : "↓") : "")</span>
+                                                </th>
+                                                <th>Popülerlik</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var question in GetFilteredAndSortedQuestions())
+                                            {
+                                                var maxCount = _popularQuestions.Max(q => q.Count);
+                                                var popularity = maxCount > 0 ? (question.Count * 100.0 / maxCount) : 0;
+                                                <tr>
+                                                    <td class="question-cell">
+                                                        <div class="question-text">@question.Question</div>
+                                                    </td>
+                                                    <td class="number-cell">
+                                                        <span class="badge-count">@question.Count</span>
+                                                    </td>
+                                                    <td class="date-cell">@question.LastAsked.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                                                    <td>
+                                                        <div class="popularity-bar">
+                                                            <div class="popularity-fill" style="width: @($"{popularity:F1}%")"></div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="empty-state-modern">
+                                    <div class="empty-icon">📭</div>
+                                    <p>Henüz popüler soru bulunmuyor.</p>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="analytics-section-modern">
+                            <div class="section-header">
+                                <h3>⏰ Saatlik Aktivite Dağılımı</h3>
+                                <div class="section-actions">
+                                    <span class="section-info">24 saatlik analiz</span>
+                                </div>
+                            </div>
+                            @if (_hourlyStats.Any())
+                            {
+                                <div class="chart-container-modern">
+                                    <div class="hourly-chart-wrapper">
+                                        <div class="hourly-bars">
+                                            @foreach (var stat in _hourlyStats)
+                                            {
+                                                var maxCount = _hourlyStats.Max(s => s.ConversationCount);
+                                                var height = maxCount > 0 ? (stat.ConversationCount * 100.0 / maxCount) : 0;
+                                                var isPeak = stat.ConversationCount == maxCount;
+                                                <div class="hourly-bar-item @(isPeak ? "peak-hour" : "")" title="@stat.Hour:00 - @stat.ConversationCount konuşma">
+                                                    <div class="hourly-bar-fill" style="height: @($"{height:F1}%")"></div>
+                                                    <div class="hourly-bar-label">@stat.Hour</div>
+                                                    <div class="hourly-bar-value">@stat.ConversationCount</div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="chart-table-wrapper">
+                                        <table class="table-modern">
+                                            <thead>
+                                                <tr>
+                                                    <th class="sortable" @onclick='() => SortHourlyStats("hour")'>
+                                                        Saat
+                                                        <span class="sort-indicator">@(_hourlySortBy == "hour" ? (_hourlySortAsc ? "↑" : "↓") : "")</span>
+                                                    </th>
+                                                    <th class="sortable number-col" @onclick='() => SortHourlyStats("count")'>
+                                                        Konuşma Sayısı
+                                                        <span class="sort-indicator">@(_hourlySortBy == "count" ? (_hourlySortAsc ? "↑" : "↓") : "")</span>
+                                                    </th>
+                                                    <th>Yoğunluk</th>
+                                                    <th>Grafik</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var stat in GetSortedHourlyStats())
+                                                {
+                                                    var maxCount = _hourlyStats.Max(s => s.ConversationCount);
+                                                    var percentage = maxCount > 0 ? (stat.ConversationCount * 100.0 / maxCount) : 0;
+                                                    var intensity = percentage > 75 ? "high" : percentage > 50 ? "medium" : percentage > 25 ? "low" : "very-low";
+                                                    <tr>
+                                                        <td class="time-cell">
+                                                            <span class="time-badge">@stat.Hour:00</span>
+                                                            @if (stat.Hour >= 6 && stat.Hour < 12)
+                                                            {
+                                                                <span class="time-label">Sabah</span>
+                                                            }
+                                                            else if (stat.Hour >= 12 && stat.Hour < 18)
+                                                            {
+                                                                <span class="time-label">Öğle</span>
+                                                            }
+                                                            else if (stat.Hour >= 18 && stat.Hour < 22)
+                                                            {
+                                                                <span class="time-label">Akşam</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="time-label">Gece</span>
+                                                            }
+                                                        </td>
+                                                        <td class="number-cell">
+                                                            <strong>@stat.ConversationCount.ToString("N0")</strong>
+                                                        </td>
+                                                        <td>
+                                                            <span class="intensity-badge intensity-@intensity">
+                                                                @(intensity == "high" ? "Yüksek" : intensity == "medium" ? "Orta" : intensity == "low" ? "Düşük" : "Çok Düşük")
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            <div class="progress-bar-modern">
+                                                                <div class="progress-fill" style="width: @($"{percentage:F1}%")"></div>
+                                                                <span class="progress-text">@($"{percentage:F0}%")</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-state">
+                            <p>Analytics yükleniyor...</p>
+                        </div>
+                    }
+                </div>
+            }
         } <!-- end of _isAuthenticated else -->
     </div>
 </div>
@@ -696,6 +1398,7 @@
     private string _loginError = string.Empty;
     private List<DomainApiKey> _domainKeys = new();
     private bool _authChecked = false;
+    private UserEntity? _currentUser;
     private string _selectedAppearanceDomain = string.Empty;
     private DomainAppearance _domainAppearance = new();
     private string _domainQuickRepliesText = string.Empty;
@@ -703,6 +1406,39 @@
     private bool _showEditModal = false;
     private string _editingDomain = string.Empty;
     private string _baseUrl = string.Empty;
+    
+    // User Management
+    private List<UserEntity> _users = new();
+    private bool _showUserModal = false;
+    private UserEntity? _editingUser = null;
+    private UserFormModel _userFormModel = new();
+    private string _userFormError = string.Empty;
+    private bool _isSavingUser = false;
+    
+    // Audit Logs
+    private List<AuditLogEntity> _auditLogs = new();
+    private string _logFilterAction = string.Empty;
+    
+    // Analytics
+    private ConversationStats? _analyticsStats;
+    private List<PopularQuestion> _popularQuestions = new();
+    private List<DailyStats> _dailyStats = new();
+    private List<HourlyStats> _hourlyStats = new();
+    private int _analyticsPeriod = 30;
+    private string _analyticsDomain = string.Empty;
+    private string _questionSearch = string.Empty;
+    private string _dailySortBy = "date";
+    private bool _dailySortAsc = false;
+    private string _questionSortBy = "count";
+    private bool _questionSortAsc = false;
+    private string _hourlySortBy = "hour";
+    private bool _hourlySortAsc = true;
+    
+    // Sorting variables for tables
+    private string _auditSortBy = "date";
+    private bool _auditSortAsc = false;
+    private string _userSortBy = "username";
+    private bool _userSortAsc = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -879,6 +1615,8 @@
 
             await AdminSettingsService.SaveSettingsAsync(_settings);
             _showSuccess = true;
+            
+            await AuditLogService.LogAsync("UpdateSettings", _currentUser?.Id.ToString(), _currentUser?.Username, "AdminSettings", "1", "Updated LLM settings", null, null, true, null);
 
             // Hide success message after 3 seconds
             await Task.Delay(3000);
@@ -887,6 +1625,7 @@
         catch (Exception ex)
         {
             _errorMessage = $"Failed to save settings: {ex.Message}";
+            await AuditLogService.LogAsync("UpdateSettings", _currentUser?.Id.ToString(), _currentUser?.Username, "AdminSettings", "1", "Failed to update settings", null, null, false, ex.Message);
         }
         finally
         {
@@ -894,9 +1633,194 @@
         }
     }
 
-    private void SetActiveTab(string tab)
+    private async Task SetActiveTab(string tab)
     {
         _activeTab = tab;
+        
+        if (tab == "domains")
+        {
+            await LoadDomainKeys();
+        }
+        else if (tab == "analytics")
+        {
+            await LoadAnalytics();
+        }
+        else if (tab == "logs")
+        {
+            await LoadAuditLogs();
+        }
+        else if (tab == "users")
+        {
+            await LoadUsers();
+        }
+    }
+
+    private async Task LoadAnalytics()
+    {
+        try
+        {
+            var startDate = DateTime.UtcNow.AddDays(-_analyticsPeriod);
+            var endDate = DateTime.UtcNow;
+            var domain = string.IsNullOrWhiteSpace(_analyticsDomain) ? null : _analyticsDomain;
+
+            _analyticsStats = await AnalyticsService.GetConversationStatsAsync(startDate, endDate, domain);
+            _popularQuestions = await AnalyticsService.GetPopularQuestionsAsync(20, startDate, endDate);
+            _dailyStats = await AnalyticsService.GetDailyStatsAsync(_analyticsPeriod, domain);
+            _hourlyStats = await AnalyticsService.GetHourlyStatsAsync(DateTime.UtcNow.Date, domain);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load analytics: {ex.Message}";
+        }
+    }
+
+    private void SortDailyStats(string column)
+    {
+        if (_dailySortBy == column)
+        {
+            _dailySortAsc = !_dailySortAsc;
+        }
+        else
+        {
+            _dailySortBy = column;
+            _dailySortAsc = true;
+        }
+    }
+
+    private List<DailyStats> GetSortedDailyStats()
+    {
+        var sorted = _dailySortBy switch
+        {
+            "date" => _dailySortAsc ? _dailyStats.OrderBy(s => s.Date) : _dailyStats.OrderByDescending(s => s.Date),
+            "count" => _dailySortAsc ? _dailyStats.OrderBy(s => s.ConversationCount) : _dailyStats.OrderByDescending(s => s.ConversationCount),
+            _ => _dailyStats.OrderByDescending(s => s.Date)
+        };
+        return sorted.ToList();
+    }
+
+    private void SortQuestions(string column)
+    {
+        if (_questionSortBy == column)
+        {
+            _questionSortAsc = !_questionSortAsc;
+        }
+        else
+        {
+            _questionSortBy = column;
+            _questionSortAsc = column == "count" ? false : true;
+        }
+    }
+
+    private List<PopularQuestion> GetFilteredAndSortedQuestions()
+    {
+        var filtered = string.IsNullOrWhiteSpace(_questionSearch)
+            ? _popularQuestions
+            : _popularQuestions.Where(q => q.Question.Contains(_questionSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var sorted = _questionSortBy switch
+        {
+            "question" => _questionSortAsc ? filtered.OrderBy(q => q.Question) : filtered.OrderByDescending(q => q.Question),
+            "count" => _questionSortAsc ? filtered.OrderBy(q => q.Count) : filtered.OrderByDescending(q => q.Count),
+            "date" => _questionSortAsc ? filtered.OrderBy(q => q.LastAsked) : filtered.OrderByDescending(q => q.LastAsked),
+            _ => filtered.OrderByDescending(q => q.Count)
+        };
+        return sorted.ToList();
+    }
+
+    private void SortHourlyStats(string column)
+    {
+        if (_hourlySortBy == column)
+        {
+            _hourlySortAsc = !_hourlySortAsc;
+        }
+        else
+        {
+            _hourlySortBy = column;
+            _hourlySortAsc = column == "hour" ? true : false;
+        }
+    }
+
+    private List<HourlyStats> GetSortedHourlyStats()
+    {
+        var sorted = _hourlySortBy switch
+        {
+            "hour" => _hourlySortAsc ? _hourlyStats.OrderBy(s => s.Hour) : _hourlyStats.OrderByDescending(s => s.Hour),
+            "count" => _hourlySortAsc ? _hourlyStats.OrderBy(s => s.ConversationCount) : _hourlyStats.OrderByDescending(s => s.ConversationCount),
+            _ => _hourlyStats.OrderBy(s => s.Hour)
+        };
+        return sorted.ToList();
+    }
+
+    private async Task ExportAnalytics()
+    {
+        try
+        {
+            var csv = "Tarih,Konuşma Sayısı\n";
+            foreach (var stat in _dailyStats)
+            {
+                csv += $"{stat.Date:yyyy-MM-dd},{stat.ConversationCount}\n";
+            }
+            
+            var fileName = $"analytics_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, csv, "text/csv");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Export hatası: {ex.Message}";
+        }
+    }
+
+    private void SortAuditLogs(string column)
+    {
+        if (_auditSortBy == column)
+        {
+            _auditSortAsc = !_auditSortAsc;
+        }
+        else
+        {
+            _auditSortBy = column;
+            _auditSortAsc = column == "date" ? false : true;
+        }
+    }
+
+    private List<AuditLogEntity> GetSortedAuditLogs()
+    {
+        var sorted = _auditSortBy switch
+        {
+            "date" => _auditSortAsc ? _auditLogs.OrderBy(l => l.Timestamp) : _auditLogs.OrderByDescending(l => l.Timestamp),
+            "user" => _auditSortAsc ? _auditLogs.OrderBy(l => l.Username ?? "") : _auditLogs.OrderByDescending(l => l.Username ?? ""),
+            "action" => _auditSortAsc ? _auditLogs.OrderBy(l => l.Action) : _auditLogs.OrderByDescending(l => l.Action),
+            "status" => _auditSortAsc ? _auditLogs.OrderBy(l => l.Success) : _auditLogs.OrderByDescending(l => l.Success),
+            _ => _auditLogs.OrderByDescending(l => l.Timestamp)
+        };
+        return sorted.ToList();
+    }
+
+    private void SortUsers(string column)
+    {
+        if (_userSortBy == column)
+        {
+            _userSortAsc = !_userSortAsc;
+        }
+        else
+        {
+            _userSortBy = column;
+            _userSortAsc = column == "login" ? false : true;
+        }
+    }
+
+    private List<UserEntity> GetSortedUsers()
+    {
+        var sorted = _userSortBy switch
+        {
+            "username" => _userSortAsc ? _users.OrderBy(u => u.Username) : _users.OrderByDescending(u => u.Username),
+            "name" => _userSortAsc ? _users.OrderBy(u => u.FullName ?? "") : _users.OrderByDescending(u => u.FullName ?? ""),
+            "admin" => _userSortAsc ? _users.OrderBy(u => u.IsAdmin) : _users.OrderByDescending(u => u.IsAdmin),
+            "status" => _userSortAsc ? _users.OrderBy(u => u.IsActive) : _users.OrderByDescending(u => u.IsActive),
+            "login" => _userSortAsc ? _users.OrderBy(u => u.LastLoginAt ?? DateTime.MinValue) : _users.OrderByDescending(u => u.LastLoginAt ?? DateTime.MinValue),
+            _ => _users.OrderBy(u => u.Username)
+        };
+        return sorted.ToList();
     }
 
     private async Task HandleReset()
@@ -937,29 +1861,35 @@
     {
         _loginError = string.Empty;
 
-        // Basit: appsettings.json üzerinden beklenen kullanıcı adı/şifreyi al
-        var expectedUser = Configuration["AdminAuth:Username"] ?? "admin";
-        var expectedPass = Configuration["AdminAuth:Password"] ?? "admin123!";
-
-        if (string.Equals(_loginModel.Username, expectedUser, StringComparison.OrdinalIgnoreCase) &&
-            _loginModel.Password == expectedPass)
+        try
         {
-            _isAuthenticated = true;
-            _authChecked = true;
+            // Database'den kullanıcı doğrulama
+            var (user, error) = await UserService.AuthenticateAsync(_loginModel.Username, _loginModel.Password);
 
-            try
+            if (user != null && string.IsNullOrEmpty(error))
             {
-                // Başarılı girişten sonra tarayıcıda oturum bilgisini sakla
-                await JSRuntime.InvokeVoidAsync("localStorage.setItem", "adminAuth", "1");
+                _isAuthenticated = true;
+                _authChecked = true;
+                _currentUser = user;
+
+                try
+                {
+                    // Başarılı girişten sonra tarayıcıda oturum bilgisini sakla
+                    await JSRuntime.InvokeVoidAsync("localStorage.setItem", "adminAuth", "1");
+                }
+                catch
+                {
+                    // localStorage hatası olursa sessiz geç
+                }
             }
-            catch
+            else
             {
-                // localStorage hatası olursa sessiz geç
+                _loginError = error ?? "Kullanıcı adı veya şifre hatalı, veya admin yetkiniz bulunmuyor.";
             }
         }
-        else
+        catch (Exception ex)
         {
-            _loginError = "Kullanıcı adı veya şifre hatalı.";
+            _loginError = $"Giriş sırasında bir hata oluştu: {ex.Message}";
         }
     }
 
@@ -973,10 +1903,12 @@
 
             await DomainApiKeyService.CreateAsync(domain);
             await LoadDomainKeys();
+            await AuditLogService.LogAsync("CreateDomainKey", _currentUser?.Id.ToString(), _currentUser?.Username, "DomainApiKey", domain, $"Created API key for domain: {domain}", null, null, true, null);
         }
         catch (Exception ex)
         {
             _errorMessage = $"Yeni anahtar oluşturulamadı: {ex.Message}";
+            await AuditLogService.LogAsync("CreateDomainKey", _currentUser?.Id.ToString(), _currentUser?.Username, "DomainApiKey", null, $"Failed to create API key", null, null, false, ex.Message);
         }
     }
 
@@ -989,10 +1921,12 @@
 
             await DomainApiKeyService.DeleteAsync(id);
             await LoadDomainKeys();
+            await AuditLogService.LogAsync("DeleteDomainKey", _currentUser?.Id.ToString(), _currentUser?.Username, "DomainApiKey", id, $"Deleted API key ID: {id}", null, null, true, null);
         }
         catch (Exception ex)
         {
             _errorMessage = $"Anahtar silinemedi: {ex.Message}";
+            await AuditLogService.LogAsync("DeleteDomainKey", _currentUser?.Id.ToString(), _currentUser?.Username, "DomainApiKey", id, $"Failed to delete API key", null, null, false, ex.Message);
         }
     }
 
@@ -1066,6 +2000,8 @@
 
             await DomainAppearanceService.SaveAsync(_domainAppearance);
             _showSuccess = true;
+            
+            await AuditLogService.LogAsync("UpdateDomainAppearance", _currentUser?.Id.ToString(), _currentUser?.Username, "DomainAppearance", _editingDomain, $"Updated appearance for domain: {_editingDomain}", null, null, true, null);
 
             await Task.Delay(1500);
             _showSuccess = false;
@@ -1074,6 +2010,7 @@
         catch (Exception ex)
         {
             _errorMessage = $"Domain görünümü kaydedilemedi: {ex.Message}";
+            await AuditLogService.LogAsync("UpdateDomainAppearance", _currentUser?.Id.ToString(), _currentUser?.Username, "DomainAppearance", _editingDomain, $"Failed to update appearance", null, null, false, ex.Message);
         }
         finally
         {
@@ -1081,10 +2018,212 @@
         }
     }
 
+    // User Management Methods
+    private async Task LoadUsers()
+    {
+        try
+        {
+            _users = await UserService.GetAllUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Kullanıcılar yüklenemedi: {ex.Message}";
+        }
+    }
+
+    private void ShowAddUserModal()
+    {
+        _editingUser = null;
+        _userFormModel = new UserFormModel { IsAdmin = true, IsActive = true };
+        _userFormError = string.Empty;
+        _showUserModal = true;
+    }
+
+    private void ShowEditUserModal(UserEntity user)
+    {
+        _editingUser = user;
+        _userFormModel = new UserFormModel
+        {
+            Username = user.Username,
+            FullName = user.FullName ?? string.Empty,
+            Email = user.Email ?? string.Empty,
+            IsAdmin = user.IsAdmin,
+            IsActive = user.IsActive
+        };
+        _userFormError = string.Empty;
+        _showUserModal = true;
+    }
+
+    private void CloseUserModal()
+    {
+        _showUserModal = false;
+        _editingUser = null;
+        _userFormModel = new UserFormModel();
+        _userFormError = string.Empty;
+    }
+
+    private async Task HandleCreateUser()
+    {
+        _userFormError = string.Empty;
+        _isSavingUser = true;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_userFormModel.Password))
+            {
+                _userFormError = "Şifre gereklidir.";
+                _isSavingUser = false;
+                return;
+            }
+
+            var (success, error) = await UserService.CreateUserAsync(
+                _userFormModel.Username,
+                _userFormModel.Password,
+                _userFormModel.IsAdmin,
+                string.IsNullOrWhiteSpace(_userFormModel.Email) ? null : _userFormModel.Email,
+                string.IsNullOrWhiteSpace(_userFormModel.FullName) ? null : _userFormModel.FullName
+            );
+
+            if (success)
+            {
+                await LoadUsers();
+                await AuditLogService.LogAsync("CreateUser", _currentUser?.Id.ToString(), _currentUser?.Username, "User", null, $"Created user: {_userFormModel.Username}", null, null, true, null);
+                CloseUserModal();
+                _showSuccess = true;
+                await Task.Delay(1500);
+                _showSuccess = false;
+            }
+            else
+            {
+                _userFormError = error ?? "Kullanıcı oluşturulamadı.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _userFormError = $"Hata: {ex.Message}";
+        }
+        finally
+        {
+            _isSavingUser = false;
+        }
+    }
+
+    private async Task HandleUpdateUser()
+    {
+        if (_editingUser == null) return;
+
+        _userFormError = string.Empty;
+        _isSavingUser = true;
+
+        try
+        {
+            var success = await UserService.UpdateUserAsync(
+                _editingUser.Id,
+                string.IsNullOrWhiteSpace(_userFormModel.Password) ? null : _userFormModel.Password,
+                _userFormModel.IsAdmin,
+                string.IsNullOrWhiteSpace(_userFormModel.Email) ? null : _userFormModel.Email,
+                string.IsNullOrWhiteSpace(_userFormModel.FullName) ? null : _userFormModel.FullName,
+                _userFormModel.IsActive
+            );
+
+            if (success)
+            {
+                await LoadUsers();
+                await AuditLogService.LogAsync("UpdateUser", _currentUser?.Id.ToString(), _currentUser?.Username, "User", _editingUser.Id.ToString(), $"Updated user: {_editingUser.Username}", null, null, true, null);
+                CloseUserModal();
+                _showSuccess = true;
+                await Task.Delay(1500);
+                _showSuccess = false;
+            }
+            else
+            {
+                _userFormError = "Kullanıcı güncellenemedi.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _userFormError = $"Hata: {ex.Message}";
+        }
+        finally
+        {
+            _isSavingUser = false;
+        }
+    }
+
+    private async Task HandleDeleteUser(int id)
+    {
+        try
+        {
+            var confirm = await JSRuntime.InvokeAsync<bool>("confirm", "Bu kullanıcıyı silmek istediğinize emin misiniz?");
+            if (!confirm) return;
+
+            var success = await UserService.DeleteUserAsync(id);
+            if (success)
+            {
+                await LoadUsers();
+                await AuditLogService.LogAsync("DeleteUser", _currentUser?.Id.ToString(), _currentUser?.Username, "User", id.ToString(), $"Deleted user ID: {id}", null, null, true, null);
+                _showSuccess = true;
+                await Task.Delay(1500);
+                _showSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Kullanıcı silinemedi: {ex.Message}";
+        }
+    }
+
+    private async Task HandleUnlockUser(int id)
+    {
+        try
+        {
+            var success = await UserService.UnlockUserAsync(id);
+            if (success)
+            {
+                await LoadUsers();
+                await AuditLogService.LogAsync("UnlockUser", _currentUser?.Id.ToString(), _currentUser?.Username, "User", id.ToString(), $"Unlocked user ID: {id}", null, null, true, null);
+                _showSuccess = true;
+                await Task.Delay(1500);
+                _showSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Kullanıcı kilidi açılamadı: {ex.Message}";
+        }
+    }
+
+    // Audit Logs Methods
+    private async Task LoadAuditLogs()
+    {
+        try
+        {
+            _auditLogs = await AuditLogService.GetLogsAsync(
+                page: 1,
+                pageSize: 100,
+                action: string.IsNullOrWhiteSpace(_logFilterAction) ? null : _logFilterAction
+            );
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Loglar yüklenemedi: {ex.Message}";
+        }
+    }
+
     private class LoginModel
     {
         public string Username { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
+    }
+
+    private class UserFormModel
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public bool IsAdmin { get; set; } = true;
+        public bool IsActive { get; set; } = true;
     }
 }
 
@@ -1099,7 +2238,7 @@
     }
 
     .admin-container {
-        max-width: 900px;
+        max-width: 100%;
         margin: 0 auto;
         padding: 2rem;
         background: white;
@@ -1599,5 +2738,899 @@
     .form-checkbox {
         margin-top: 0.25rem;
         cursor: pointer;
+    }
+
+    .filter-controls {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-end;
+        margin-bottom: 1rem;
+    }
+
+    .filter-controls .form-control {
+        flex: 0 0 auto;
+    }
+
+    /* Analytics Styles */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .stat-icon {
+        font-size: 2.5rem;
+        line-height: 1;
+    }
+
+    .stat-content {
+        flex: 1;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #007bff;
+        line-height: 1.2;
+    }
+
+    .stat-label {
+        font-size: 0.875rem;
+        color: #666;
+        margin-top: 0.25rem;
+    }
+
+    .analytics-section {
+        margin-bottom: 2rem;
+    }
+
+    .analytics-section h3 {
+        margin-bottom: 1rem;
+        color: #333;
+    }
+
+    .chart-container {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .progress-bar-container {
+        width: 100%;
+        height: 20px;
+        background: #e9ecef;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #007bff, #0056b3);
+        transition: width 0.3s ease;
+    }
+
+    /* Modern Analytics Dashboard Styles */
+    .analytics-dashboard {
+        padding: 2rem;
+    }
+
+    .analytics-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #e9ecef;
+    }
+
+    .analytics-header h2 {
+        margin: 0;
+        font-size: 2rem;
+        color: #333;
+    }
+
+    .analytics-subtitle {
+        margin: 0.5rem 0 0 0;
+        color: #666;
+        font-size: 0.95rem;
+    }
+
+    .analytics-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .analytics-filters {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+        background: #f8f9fa;
+        border-radius: 12px;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .filter-group label {
+        font-weight: 600;
+        color: #495057;
+        font-size: 0.9rem;
+    }
+
+    .modern-select {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.75rem;
+        background: white;
+        transition: all 0.3s ease;
+    }
+
+    .modern-select:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        outline: none;
+    }
+
+    .btn-refresh {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+
+    .btn-icon {
+        font-size: 1.1rem;
+    }
+
+    .stats-grid-modern {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card-modern {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
+        border-left: 4px solid;
+    }
+
+    .stat-card-modern:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+
+    .stat-card-modern.stat-primary {
+        border-left-color: #007bff;
+    }
+
+    .stat-card-modern.stat-success {
+        border-left-color: #28a745;
+    }
+
+    .stat-card-modern.stat-info {
+        border-left-color: #17a2b8;
+    }
+
+    .stat-card-modern.stat-warning {
+        border-left-color: #ffc107;
+    }
+
+    .stat-card-modern.stat-secondary {
+        border-left-color: #6c757d;
+    }
+
+    .stat-card-modern.stat-dark {
+        border-left-color: #343a40;
+    }
+
+    .stat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .stat-icon-modern {
+        font-size: 2.5rem;
+        line-height: 1;
+    }
+
+    .stat-trend {
+        font-size: 1.2rem;
+    }
+
+    .trend-up {
+        color: #28a745;
+    }
+
+    .trend-down {
+        color: #dc3545;
+    }
+
+    .trend-neutral {
+        color: #6c757d;
+    }
+
+    .stat-body {
+        flex: 1;
+    }
+
+    .stat-value-modern {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #212529;
+        line-height: 1.2;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-label-modern {
+        font-size: 0.95rem;
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-period, .stat-detail {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 0.5rem;
+    }
+
+    .analytics-section-modern {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .section-header h3 {
+        margin: 0;
+        font-size: 1.5rem;
+        color: #333;
+    }
+
+    .section-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .section-info {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+
+    .search-input {
+        padding: 0.5rem 1rem;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        width: 250px;
+    }
+
+    .chart-container-modern {
+        margin-top: 1rem;
+    }
+
+    .chart-wrapper {
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .bar-chart {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        height: 200px;
+        gap: 4px;
+        padding: 1rem 0;
+    }
+
+    .bar-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+        position: relative;
+        cursor: pointer;
+    }
+
+    .bar-fill {
+        width: 100%;
+        background: linear-gradient(180deg, #007bff, #0056b3);
+        border-radius: 4px 4px 0 0;
+        transition: all 0.3s ease;
+        min-height: 4px;
+    }
+
+    .bar-item:hover .bar-fill {
+        opacity: 0.8;
+    }
+
+    .bar-label {
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
+        color: #6c757d;
+        font-weight: 600;
+    }
+
+    .hourly-chart-wrapper {
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .hourly-bars {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        height: 250px;
+        gap: 2px;
+        padding: 1rem 0;
+    }
+
+    .hourly-bar-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+        position: relative;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .hourly-bar-item:hover {
+        transform: scaleY(1.05);
+    }
+
+    .hourly-bar-item.peak-hour .hourly-bar-fill {
+        background: linear-gradient(180deg, #ffc107, #ff9800);
+    }
+
+    .hourly-bar-fill {
+        width: 100%;
+        background: linear-gradient(180deg, #17a2b8, #138496);
+        border-radius: 4px 4px 0 0;
+        transition: all 0.3s ease;
+        min-height: 4px;
+    }
+
+    .hourly-bar-label {
+        margin-top: 0.5rem;
+        font-size: 0.7rem;
+        color: #6c757d;
+        font-weight: 600;
+    }
+
+    .hourly-bar-value {
+        font-size: 0.65rem;
+        color: #495057;
+        margin-top: 0.25rem;
+        font-weight: 600;
+    }
+
+    .chart-table-wrapper {
+        margin-top: 1.5rem;
+    }
+
+    .table-modern {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+    }
+
+    .table-modern thead {
+        background: #f8f9fa;
+    }
+
+    .table-modern th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: #495057;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .table-modern th.sortable {
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.2s ease;
+    }
+
+    .table-modern th.sortable:hover {
+        background: #e9ecef;
+    }
+
+    .sort-indicator {
+        margin-left: 0.5rem;
+        color: #007bff;
+        font-weight: bold;
+    }
+
+    .table-modern td {
+        padding: 1rem;
+        border-bottom: 1px solid #e9ecef;
+        color: #495057;
+    }
+
+    .table-modern tbody tr {
+        transition: background 0.2s ease;
+    }
+
+    .table-modern tbody tr:hover {
+        background: #f8f9fa;
+    }
+
+    .table-modern tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .date-cell {
+        font-weight: 500;
+        color: #495057;
+    }
+
+    .number-cell {
+        text-align: right;
+        font-weight: 600;
+    }
+
+    .number-col {
+        text-align: right;
+    }
+
+    .question-cell {
+        max-width: 400px;
+    }
+
+    .question-text {
+        word-wrap: break-word;
+        line-height: 1.5;
+    }
+
+    .time-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .time-badge {
+        background: #e9ecef;
+        padding: 0.25rem 0.75rem;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #495057;
+    }
+
+    .time-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        font-style: italic;
+    }
+
+    .trend-cell {
+        text-align: center;
+    }
+
+    .trend-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .trend-badge.trend-up {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .trend-badge.trend-down {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .trend-badge.trend-neutral {
+        background: #e2e3e5;
+        color: #383d41;
+    }
+
+    .badge-count {
+        display: inline-block;
+        background: #007bff;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .intensity-badge {
+        display: inline-block;
+        padding: 0.35rem 0.85rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .intensity-high {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .intensity-medium {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .intensity-low {
+        background: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .intensity-very-low {
+        background: #e2e3e5;
+        color: #383d41;
+    }
+
+    .popularity-bar {
+        width: 100%;
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .popularity-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #ffc107, #ff9800);
+        transition: width 0.3s ease;
+    }
+
+    .progress-bar-modern {
+        position: relative;
+        width: 100%;
+        height: 24px;
+        background: #e9ecef;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #007bff, #0056b3);
+        transition: width 0.3s ease;
+        border-radius: 12px;
+    }
+
+    .progress-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #495057;
+        z-index: 1;
+    }
+
+    .table-container-modern {
+        overflow-x: auto;
+        border-radius: 8px;
+    }
+
+    .empty-state-modern {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+    }
+
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-state-modern p {
+        font-size: 1.1rem;
+        margin: 0;
+    }
+
+    @@media (max-width: 768px) {
+        .analytics-header {
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .analytics-filters {
+            grid-template-columns: 1fr;
+        }
+
+        .stats-grid-modern {
+            grid-template-columns: 1fr;
+        }
+
+        .bar-chart, .hourly-bars {
+            gap: 2px;
+        }
+
+        .bar-label, .hourly-bar-label {
+            font-size: 0.65rem;
+        }
+    }
+
+    /* Enhanced Table Styles for All Tables */
+    .domain-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .domain-table thead {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .domain-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .domain-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #e9ecef;
+        color: #495057;
+    }
+
+    .domain-table tbody tr {
+        transition: background 0.2s ease;
+    }
+
+    .domain-table tbody tr:hover {
+        background: #f8f9fa;
+    }
+
+    .domain-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    /* Enhanced Status Badges */
+    .status-badge-modern {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.85rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .status-badge-modern.success {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .status-badge-modern.error {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .status-badge-modern.locked {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .status-icon {
+        font-size: 1rem;
+    }
+
+    .lock-info {
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+        opacity: 0.8;
+    }
+
+    /* Enhanced Action Buttons */
+    .action-buttons-modern {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .btn-action {
+        padding: 0.5rem;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: all 0.2s ease;
+        background: transparent;
+    }
+
+    .btn-action.btn-edit {
+        color: #007bff;
+    }
+
+    .btn-action.btn-edit:hover {
+        background: #e7f3ff;
+        transform: scale(1.1);
+    }
+
+    .btn-action.btn-unlock {
+        color: #ffc107;
+    }
+
+    .btn-action.btn-unlock:hover {
+        background: #fff8e1;
+        transform: scale(1.1);
+    }
+
+    .btn-action.btn-delete {
+        color: #dc3545;
+    }
+
+    .btn-action.btn-delete:hover {
+        background: #ffeaea;
+        transform: scale(1.1);
+    }
+
+    /* Enhanced User Cell */
+    .user-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .user-name {
+        font-weight: 600;
+        color: #212529;
+    }
+
+    .user-id, .user-meta {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+
+    /* Enhanced Date Cell */
+    .date-primary {
+        font-weight: 600;
+        color: #212529;
+    }
+
+    .date-secondary {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+
+    /* Enhanced Detail Cell */
+    .detail-cell {
+        max-width: 300px;
+    }
+
+    .detail-text {
+        word-wrap: break-word;
+        line-height: 1.5;
+    }
+
+    .error-detail {
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: #dc3545;
+        font-style: italic;
+    }
+
+    /* Enhanced Badges */
+    .action-badge {
+        display: inline-block;
+        padding: 0.35rem 0.85rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        background: #e9ecef;
+        color: #495057;
+    }
+
+    .ip-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 8px;
+        background: #f8f9fa;
+        color: #495057;
+        font-family: monospace;
+        font-size: 0.85rem;
+    }
+
+    .role-badge {
+        display: inline-block;
+        padding: 0.35rem 0.85rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .role-badge.admin {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .role-badge.user {
+        background: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .email-link {
+        color: #007bff;
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+
+    .email-link:hover {
+        color: #0056b3;
+        text-decoration: underline;
+    }
+
+    .text-muted {
+        color: #6c757d;
+        font-style: italic;
+    }
+
+    /* Enhanced Domain Table */
+    .api-key-code {
+        background: #f8f9fa;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        color: #495057;
+        border: 1px solid #dee2e6;
     }
 </style>

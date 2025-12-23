@@ -90,3 +90,46 @@ window.enableDragScroll = (selector) => {
     });
 };
 
+// LocalStorage functions for session persistence
+window.saveChatSession = (sessionId, messages) => {
+    try {
+        localStorage.setItem('chatbot_sessionId', sessionId);
+        localStorage.setItem('chatbot_messages', JSON.stringify(messages));
+    } catch (e) {
+        console.error('Error saving chat session:', e);
+    }
+};
+
+window.loadChatSession = () => {
+    try {
+        const sessionId = localStorage.getItem('chatbot_sessionId');
+        const messagesJson = localStorage.getItem('chatbot_messages');
+        const messages = messagesJson ? JSON.parse(messagesJson) : null;
+        return { sessionId, messages };
+    } catch (e) {
+        console.error('Error loading chat session:', e);
+        return { sessionId: null, messages: null };
+    }
+};
+
+window.clearChatSession = () => {
+    try {
+        localStorage.removeItem('chatbot_sessionId');
+        localStorage.removeItem('chatbot_messages');
+    } catch (e) {
+        console.error('Error clearing chat session:', e);
+    }
+};
+
+// Download file function
+window.downloadFile = (filename, content, contentType) => {
+    const element = document.createElement('a');
+    const file = new Blob([content], { type: contentType || 'text/plain;charset=utf-8' });
+    element.href = URL.createObjectURL(file);
+    element.download = filename;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+    URL.revokeObjectURL(element.href);
+};
+

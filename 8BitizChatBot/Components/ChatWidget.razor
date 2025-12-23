@@ -2,6 +2,7 @@
 @using BitizChatBot.Models
 @using BitizChatBot.Services
 @using Microsoft.AspNetCore.Components.Web
+@using System.Text.Json
 @inject IChatOrchestrationService ChatService
 @inject IAdminSettingsService AdminSettingsService
 @inject IDomainAppearanceService DomainAppearanceService
@@ -23,6 +24,7 @@
                     <h2 class="chat-widget-title">
                         @_chatbotName
                     </h2>
+                    <div class="session-id-display">@_sessionId</div>
                     <div class="offline-message">
                         <span class="@(_isOnline ? "online" : "")">@(_isOnline ? "Çevrimiçi" : "Çevrimdışı")</span>
                     </div>
@@ -293,7 +295,7 @@
         if (firstRender)
         {
             await LoadAppearanceSettings();
-            await AddWelcomeMessage();
+            await LoadChatSessionFromStorage();
             await Task.Delay(100); // Wait for DOM to update
             await ScrollToBottom();
             await EnableCardDrag();
@@ -354,6 +356,46 @@
         }
     }
 
+    private async Task LoadChatSessionFromStorage()
+    {
+        try
+        {
+            var sessionIdJson = await JSRuntime.InvokeAsync<string>("eval", "localStorage.getItem('chatbot_sessionId') || null");
+            var messagesJson = await JSRuntime.InvokeAsync<string>("eval", "localStorage.getItem('chatbot_messages') || null");
+            
+            if (!string.IsNullOrEmpty(sessionIdJson) && sessionIdJson != "null")
+            {
+                // Restore session ID (remove quotes if present)
+                _sessionId = sessionIdJson.Trim('"');
+                
+                // Restore messages if they exist
+                if (!string.IsNullOrEmpty(messagesJson) && messagesJson != "null")
+                {
+                    var messages = JsonSerializer.Deserialize<List<ChatMessage>>(messagesJson, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                    
+                    if (messages != null && messages.Any())
+                    {
+                        _messages = messages;
+                        StateHasChanged();
+                        return;
+                    }
+                }
+            }
+            
+            // No saved session, add welcome message
+            await AddWelcomeMessage();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load chat session from storage");
+            // If loading fails, add welcome message
+            await AddWelcomeMessage();
+        }
+    }
+
     private async Task AddWelcomeMessage()
     {
         var settings = await AdminSettingsService.GetSettingsAsync();
@@ -365,6 +407,19 @@
             Timestamp = DateTime.UtcNow
         };
         _messages.Add(welcomeMessage);
+        await SaveChatSessionToStorage();
+    }
+
+    private async Task SaveChatSessionToStorage()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("saveChatSession", _sessionId, _messages);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to save chat session to storage");
+        }
     }
 
     private async Task ToggleChat()
@@ -398,13 +453,16 @@
         }
         catch { }
         
+        // Clear localStorage
+        await JSRuntime.InvokeVoidAsync("clearChatSession");
+        
         // Clear chat history and reset session with NEW session ID
         _messages.Clear();
         _unreadCount = 0;
         _sessionId = Guid.NewGuid().ToString();
         
         // Show welcome message again
-        await LoadWelcomeMessage();
+        await AddWelcomeMessage();
         
         StateHasChanged();
         await Task.Delay(100);
@@ -522,6 +580,7 @@
             Timestamp = DateTime.UtcNow
         };
         _messages.Add(userMsg);
+        await SaveChatSessionToStorage();
         StateHasChanged();
         await Task.Delay(50);
         await ScrollToBottom();
@@ -560,6 +619,7 @@
                 Tires = response.Tires
             };
             _messages.Add(botMsg);
+            await SaveChatSessionToStorage();
 
             if (!_isOpen)
             {
@@ -589,6 +649,7 @@
                 Timestamp = DateTime.UtcNow
             };
             _messages.Add(errorMsg);
+            await SaveChatSessionToStorage();
             StateHasChanged();
             await Task.Delay(50);
             await ScrollToBottom();
@@ -738,6 +799,7 @@
                     Timestamp = DateTime.UtcNow
                 };
                 _messages.Add(userMsg);
+                await SaveChatSessionToStorage();
                 StateHasChanged();
                 await Task.Delay(50);
                 await ScrollToBottom();
@@ -773,6 +835,7 @@
                     Tires = response.Tires
                 };
                 _messages.Add(botMsg);
+                await SaveChatSessionToStorage();
                 
                 // Play message received sound if enabled
                 if (_soundEnabled)
@@ -794,6 +857,7 @@
                     Timestamp = DateTime.UtcNow
                 };
                 _messages.Add(errorMsg);
+                await SaveChatSessionToStorage();
                 StateHasChanged();
                 await Task.Delay(50);
                 await ScrollToBottom();
@@ -808,6 +872,7 @@
                 Timestamp = DateTime.UtcNow
             };
             _messages.Add(errorMsg);
+            await SaveChatSessionToStorage();
             StateHasChanged();
             await Task.Delay(50);
             await ScrollToBottom();
@@ -843,6 +908,12 @@
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? Error { get; set; }
+    }
+
+    private class SessionData
+    {
+        public string? SessionId { get; set; }
+        public List<ChatMessage>? Messages { get; set; }
     }
 }
 
@@ -995,6 +1066,21 @@
         text-overflow: ellipsis !important;
         white-space: nowrap !important;
         overflow: hidden !important;
+    }
+
+    .session-id-display {
+        font-size: 9px !important;
+        color: rgba(255, 255, 255, 0.6) !important;
+        font-family: 'Courier New', monospace !important;
+        letter-spacing: 0.5px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1.2 !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        user-select: all !important;
+        cursor: text !important;
     }
 
     .header-actions {

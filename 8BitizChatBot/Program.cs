@@ -1,6 +1,8 @@
 using BitizChatBot.Services;
 using BitizChatBot.Data;
+using BitizChatBot.Middleware;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,10 +12,20 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddControllers();
 
-// Add Entity Framework
+// Add Entity Framework - PostgreSQL veya SQL Server desteği
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+var usePostgres = builder.Configuration.GetValue<bool>("Database:UsePostgreSQL", false);
+
+if (usePostgres)
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseNpgsql(connectionString));
+}
+else
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlServer(connectionString));
+}
 
 // Register Services
 builder.Services.AddHttpContextAccessor();
@@ -25,6 +37,10 @@ builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<IExternalApiService, ExternalApiService>();
 builder.Services.AddScoped<IChatOrchestrationService, ChatOrchestrationService>();
 builder.Services.AddScoped<IOllamaService, OllamaService>();
+builder.Services.AddScoped<ISecurityService, SecurityService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 // HttpClient for External APIs
 builder.Services.AddHttpClient<IExternalApiService, ExternalApiService>(client =>
@@ -63,10 +79,22 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
 
+// Security Middleware
+app.UseMiddleware<RateLimitMiddleware>();
+
 app.MapRazorComponents<BitizChatBot.Components.App>()
     .AddInteractiveServerRenderMode();
 
 app.MapControllers();
+
+// Initialize database (create default admin user if needed)
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await DbInitializer.InitializeAsync(context, userService, logger);
+}
 
 app.Run();
 

@@ -16,8 +16,10 @@ public class ChatOrchestrationService : IChatOrchestrationService
     private readonly ApplicationDbContext _context;
     private readonly ILogger<ChatOrchestrationService> _logger;
     private readonly IHttpContextAccessor? _httpContextAccessor;
+    private readonly ISecurityService _securityService;
+    private readonly bool _useMemoryForContext;
     
-    // In-memory conversation contexts (in production, use distributed cache or database)
+    // In-memory conversation contexts (fallback when UseMemoryForContext = true)
     private static readonly Dictionary<string, ConversationContext> _conversationContexts = new();
     private static readonly object _contextLock = new object();
 
@@ -28,6 +30,8 @@ public class ChatOrchestrationService : IChatOrchestrationService
         IDomainAppearanceService domainAppearanceService,
         ApplicationDbContext context,
         ILogger<ChatOrchestrationService> logger,
+        ISecurityService securityService,
+        IConfiguration configuration,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _llmService = llmService;
@@ -36,7 +40,9 @@ public class ChatOrchestrationService : IChatOrchestrationService
         _domainAppearanceService = domainAppearanceService;
         _context = context;
         _logger = logger;
+        _securityService = securityService;
         _httpContextAccessor = httpContextAccessor;
+        _useMemoryForContext = configuration.GetValue<bool>("Database:UseMemoryForContext", true);
     }
 
     public async Task<ChatResponse> ProcessMessageAsync(string userMessage, string? sessionId = null)
@@ -44,8 +50,29 @@ public class ChatOrchestrationService : IChatOrchestrationService
         ChatResponse? response = null;
         try
         {
+            // Security: Input validation and sanitization
+            if (!_securityService.IsValidInput(userMessage))
+            {
+                return new ChatResponse { Message = "Mesajınız çok uzun veya geçersiz. Lütfen 400 karakterden kısa bir mesaj gönderin." };
+            }
+
+            if (_securityService.ContainsSpam(userMessage))
+            {
+                _logger.LogWarning("Spam detected in message from session {SessionId}", sessionId);
+                return new ChatResponse { Message = "Mesajınız spam içeriyor gibi görünüyor. Lütfen geçerli bir soru sorun." };
+            }
+
+            // Sanitize input
+            userMessage = _securityService.SanitizeInput(userMessage);
+
             // Ensure session exists in database
             sessionId = await EnsureSessionAsync(sessionId);
+
+            // Security: Validate session security
+            var session = await _context.ChatSessions.FindAsync(sessionId);
+            var clientIp = _securityService.GetClientIpAddress(_httpContextAccessor?.HttpContext);
+            var userAgent = _securityService.GetUserAgent(_httpContextAccessor?.HttpContext);
+            _securityService.ValidateSessionSecurity(sessionId, clientIp, userAgent, session);
 
             // Save user message to database
             await SaveMessageAsync(sessionId, userMessage, isUser: true);
@@ -63,7 +90,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
                 // Clear context on greeting
                 if (sessionId != null)
                 {
-                    ClearContext(sessionId);
+                    await ClearContextAsync(sessionId);
                 }
                 response = new ChatResponse { Message = simpleResponse };
                 if (!string.IsNullOrEmpty(sessionId))
@@ -74,7 +101,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
             }
 
             // Get or create conversation context
-            var context = GetOrCreateContext(sessionId);
+            var context = await GetOrCreateContextAsync(sessionId);
             
             // WhatsApp follow-up: waiting for consent?
             if (context.AwaitingWhatsAppConsent)
@@ -84,6 +111,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
                 {
                     context.AwaitingWhatsAppConsent = false;
                     context.AwaitingWhatsAppPhone = true;
+                    await SaveContextAsync(context);
                     return new ChatResponse { Message = "Telefon numaranızı başında 0 olmadan yazın, bayi listesini WhatsApp ile ileteyim." };
                 }
                 else if (IsNegative(lower))
@@ -91,6 +119,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
                     context.AwaitingWhatsAppConsent = false;
                     context.AwaitingWhatsAppPhone = false;
                     context.LastDealerSummary = null;
+                    await SaveContextAsync(context);
                     // continue
                 }
             }
@@ -107,6 +136,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
                 context.AwaitingWhatsAppPhone = false;
                 var summary = context.LastDealerSummary ?? "Bayi listesi hazır.";
                 context.LastDealerSummary = null;
+                await SaveContextAsync(context);
 
                 return new ChatResponse
                 {
@@ -119,6 +149,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
 
             // Merge detected parameters with context
             MergeParameters(context, intentResult);
+            await SaveContextAsync(context);
 
             // If clarification is needed, return the clarification message
             if (intentResult.RequiresClarification && !string.IsNullOrEmpty(intentResult.ClarificationMessage))
@@ -133,16 +164,19 @@ public class ChatOrchestrationService : IChatOrchestrationService
             {
                 case IntentType.DealerSearchByLocation:
                     context.CurrentIntent = null; // Clear context after successful search
+                    await SaveContextAsync(context);
                     response = await HandleDealerSearchByLocation(intentResult, sessionId ?? string.Empty);
                     break;
                 
                 case IntentType.DealerSearchByCityDistrict:
                     context.CurrentIntent = null; // Clear context after successful search
+                    await SaveContextAsync(context);
                     response = await HandleDealerSearchByCityDistrict(intentResult, sessionId ?? string.Empty);
                     break;
                 
                 case IntentType.TireSearch:
                     response = await HandleTireSearch(intentResult, context);
+                    await SaveContextAsync(context);
                     break;
 
                 case IntentType.GeneralQuestion:
@@ -286,7 +320,47 @@ public class ChatOrchestrationService : IChatOrchestrationService
         }
     }
 
-    private ConversationContext GetOrCreateContext(string? sessionId)
+    private async Task<ConversationContext> GetOrCreateContextAsync(string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            sessionId = Guid.NewGuid().ToString();
+        }
+
+        // Memory kullanılıyorsa memory'den al
+        if (_useMemoryForContext)
+        {
+            return GetOrCreateContextMemory(sessionId);
+        }
+
+        // Database'den context'i yükle
+        var entity = await _context.ConversationContexts.FindAsync(sessionId);
+        
+        if (entity == null)
+        {
+            // Yeni context oluştur
+            entity = new ConversationContextEntity
+            {
+                SessionId = sessionId,
+                LastActivity = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.ConversationContexts.Add(entity);
+            await _context.SaveChangesAsync();
+        }
+        else
+        {
+            // LastActivity'yi güncelle
+            entity.LastActivity = DateTime.UtcNow;
+            _context.ConversationContexts.Update(entity);
+            await _context.SaveChangesAsync();
+        }
+
+        // Entity'den model'e dönüştür
+        return MapToConversationContext(entity);
+    }
+
+    private ConversationContext GetOrCreateContextMemory(string? sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
@@ -318,15 +392,119 @@ public class ChatOrchestrationService : IChatOrchestrationService
         }
     }
 
-    public void ClearContext(string sessionId)
+    private ConversationContext MapToConversationContext(ConversationContextEntity entity)
+    {
+        var context = new ConversationContext
+        {
+            SessionId = entity.SessionId,
+            CurrentIntent = !string.IsNullOrEmpty(entity.CurrentIntent) 
+                ? Enum.Parse<IntentType>(entity.CurrentIntent) 
+                : null,
+            Brand = entity.Brand,
+            Model = entity.Model,
+            Year = entity.Year,
+            Season = entity.Season,
+            BrandModelInvalidAttempts = entity.BrandModelInvalidAttempts,
+            AwaitingWhatsAppConsent = entity.AwaitingWhatsAppConsent,
+            AwaitingWhatsAppPhone = entity.AwaitingWhatsAppPhone,
+            LastDealerSummary = entity.LastDealerSummary,
+            LastActivity = entity.LastActivity
+        };
+
+        // CollectedParameters JSON'dan deserialize et
+        if (!string.IsNullOrEmpty(entity.CollectedParametersJson))
+        {
+            try
+            {
+                context.CollectedParameters = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                    entity.CollectedParametersJson) ?? new Dictionary<string, string>();
+            }
+            catch
+            {
+                context.CollectedParameters = new Dictionary<string, string>();
+            }
+        }
+
+        return context;
+    }
+
+    private async Task SaveContextAsync(ConversationContext context)
+    {
+        // Memory kullanılıyorsa kaydetme gerekmez (zaten memory'de)
+        if (_useMemoryForContext)
+        {
+            // Memory'de zaten güncel, sadece LastActivity'yi güncelle
+            lock (_contextLock)
+            {
+                if (_conversationContexts.TryGetValue(context.SessionId, out var existing))
+                {
+                    existing.LastActivity = DateTime.UtcNow;
+                }
+            }
+            return;
+        }
+
+        // Database'e kaydet
+        var entity = await _context.ConversationContexts.FindAsync(context.SessionId);
+        
+        if (entity == null)
+        {
+            entity = new ConversationContextEntity
+            {
+                SessionId = context.SessionId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.ConversationContexts.Add(entity);
+        }
+
+        // Model'den entity'ye dönüştür
+        entity.CurrentIntent = context.CurrentIntent?.ToString();
+        entity.Brand = context.Brand;
+        entity.Model = context.Model;
+        entity.Year = context.Year;
+        entity.Season = context.Season;
+        entity.BrandModelInvalidAttempts = context.BrandModelInvalidAttempts;
+        entity.AwaitingWhatsAppConsent = context.AwaitingWhatsAppConsent;
+        entity.AwaitingWhatsAppPhone = context.AwaitingWhatsAppPhone;
+        entity.LastDealerSummary = context.LastDealerSummary;
+        entity.LastActivity = context.LastActivity;
+
+        // CollectedParameters'ı JSON'a serialize et
+        if (context.CollectedParameters != null && context.CollectedParameters.Any())
+        {
+            entity.CollectedParametersJson = JsonSerializer.Serialize(context.CollectedParameters);
+        }
+
+        _context.ConversationContexts.Update(entity);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task ClearContextAsync(string sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
             return;
-            
-        lock (_contextLock)
+
+        if (_useMemoryForContext)
         {
-            _conversationContexts.Remove(sessionId);
+            lock (_contextLock)
+            {
+                _conversationContexts.Remove(sessionId);
+            }
+            return;
         }
+
+        var entity = await _context.ConversationContexts.FindAsync(sessionId);
+        if (entity != null)
+        {
+            _context.ConversationContexts.Remove(entity);
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    public void ClearContext(string sessionId)
+    {
+        // Synchronous wrapper for backward compatibility
+        _ = ClearContextAsync(sessionId);
     }
 
     private void MergeParameters(ConversationContext context, IntentDetectionResult intent)
@@ -719,9 +897,10 @@ public class ChatOrchestrationService : IChatOrchestrationService
         var resultMessage = response.Message ?? $"{response.Dealers.Count} adet bayi bulundu";
         var summary = BuildDealerSummary(response.Dealers);
 
-        var context = GetOrCreateContext(sessionId);
+        var context = await GetOrCreateContextAsync(sessionId);
         context.AwaitingWhatsAppConsent = true;
         context.LastDealerSummary = summary;
+        await SaveContextAsync(context);
 
         return new ChatResponse 
         { 
@@ -753,9 +932,10 @@ public class ChatOrchestrationService : IChatOrchestrationService
         var resultMessage = response.Message ?? $"{response.Dealers.Count} adet bayi bulundu";
         var summary = BuildDealerSummary(response.Dealers);
 
-        var context = GetOrCreateContext(sessionId);
+        var context = await GetOrCreateContextAsync(sessionId);
         context.AwaitingWhatsAppConsent = true;
         context.LastDealerSummary = summary;
+        await SaveContextAsync(context);
 
         return new ChatResponse 
         { 
@@ -814,6 +994,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
         {
             context.BrandModelInvalidAttempts++;
             context.Model = null; // force re-entry
+            await SaveContextAsync(context);
             if (context.BrandModelInvalidAttempts >= 3)
             {
                 context.CurrentIntent = null;
@@ -823,6 +1004,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
                 context.Season = null;
                 context.CollectedParameters.Clear();
                 context.BrandModelInvalidAttempts = 0;
+                await SaveContextAsync(context);
                 return new ChatResponse { Message = "Marka / model bilgisi yanlış girildi, lütfen tekrar deneyiniz." };
             }
 
@@ -838,6 +1020,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
         else
         {
             context.BrandModelInvalidAttempts = 0;
+            await SaveContextAsync(context);
         }
 
         if (string.IsNullOrWhiteSpace(yearStr) || !int.TryParse(yearStr, out var year))
@@ -868,6 +1051,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
         context.Year = null;
         context.Season = null;
         context.CollectedParameters.Clear();
+        await SaveContextAsync(context);
 
         if (!response.Success || response.Tires.Count == 0)
         {

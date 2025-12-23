@@ -7,6 +7,7 @@ public interface IChatOrchestrationService
 {
     Task<ChatResponse> ProcessMessageAsync(string userMessage, string? sessionId = null);
     void ClearContext(string sessionId);
+    Task ClearContextAsync(string sessionId);
 }
 
 public class ChatResponse

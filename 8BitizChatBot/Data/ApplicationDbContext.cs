@@ -15,6 +15,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<DomainAppearanceEntity> DomainAppearances { get; set; }
     public DbSet<ChatSession> ChatSessions { get; set; }
     public DbSet<ChatMessageEntity> ChatMessages { get; set; }
+    public DbSet<ConversationContextEntity> ConversationContexts { get; set; }
+    public DbSet<UserEntity> Users { get; set; }
+    public DbSet<AuditLogEntity> AuditLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,6 +67,36 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(e => e.SessionId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.ToTable("ChatMessages");
+        });
+
+        // ConversationContexts
+        modelBuilder.Entity<ConversationContextEntity>(entity =>
+        {
+            entity.HasKey(e => e.SessionId);
+            entity.HasIndex(e => e.LastActivity);
+            entity.HasOne(e => e.Session)
+                .WithMany()
+                .HasForeignKey(e => e.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.ToTable("ConversationContexts");
+        });
+
+        // Users
+        modelBuilder.Entity<UserEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Username).IsUnique();
+            entity.ToTable("Users");
+        });
+
+        // AuditLogs
+        modelBuilder.Entity<AuditLogEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Timestamp);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Action);
+            entity.ToTable("AuditLogs");
         });
     }
 }
