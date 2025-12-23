@@ -80,13 +80,13 @@ public class ChatOrchestrationService : IChatOrchestrationService
             if (context.AwaitingWhatsAppConsent)
             {
                 var lower = userMessage.Trim().ToLowerInvariant();
-                if (lower.Contains("evet") || lower.Contains("gönder") || lower.Contains("gonder"))
+                if (IsAffirmative(lower))
                 {
                     context.AwaitingWhatsAppConsent = false;
                     context.AwaitingWhatsAppPhone = true;
                     return new ChatResponse { Message = "Telefon numaranızı başında 0 olmadan yazın, bayi listesini WhatsApp ile ileteyim." };
                 }
-                else if (lower.Contains("hayır") || lower.Contains("hayir") || lower.Contains("istemiyorum"))
+                else if (IsNegative(lower))
                 {
                     context.AwaitingWhatsAppConsent = false;
                     context.AwaitingWhatsAppPhone = false;
@@ -575,6 +575,23 @@ public class ChatOrchestrationService : IChatOrchestrationService
         }
         
         return char.ToUpperInvariant(firstChar) + text.Substring(1).ToLowerInvariant();
+    }
+
+    private bool IsAffirmative(string lower)
+    {
+        return lower.Contains("evet") ||
+               lower.Contains("gönder") || lower.Contains("gonder") ||
+               lower.Contains("yolla") || lower.Contains("gönderin") || lower.Contains("gonderin") ||
+               lower.Contains("olur") || lower.Contains("tamam") || lower.Contains("ok") || lower.Contains("okey") ||
+               lower.Contains("isterim") || lower.Contains("tabii") || lower.Contains("elbette");
+    }
+
+    private bool IsNegative(string lower)
+    {
+        return lower.Contains("hayır") || lower.Contains("hayir") ||
+               lower.Contains("istemiyorum") || lower.Contains("yok") ||
+               lower.Contains("gerek yok") || lower.Contains("kapat") ||
+               lower.Contains("no");
     }
 
     private string BuildDealerSummary(List<DealerDto> dealers)
