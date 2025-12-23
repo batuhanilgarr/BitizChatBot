@@ -55,3 +55,38 @@ window.focusElement = (element) => {
     }
 };
 
+// Enable drag-to-scroll for horizontal card containers
+window.enableDragScroll = (selector) => {
+    const elements = document.querySelectorAll(selector);
+    elements.forEach((el) => {
+        let isDown = false;
+        let startX = 0;
+        let scrollLeft = 0;
+
+        el.addEventListener('mousedown', (e) => {
+            isDown = true;
+            el.classList.add('dragging');
+            startX = e.pageX - el.offsetLeft;
+            scrollLeft = el.scrollLeft;
+        });
+
+        el.addEventListener('mouseleave', () => {
+            isDown = false;
+            el.classList.remove('dragging');
+        });
+
+        el.addEventListener('mouseup', () => {
+            isDown = false;
+            el.classList.remove('dragging');
+        });
+
+        el.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - el.offsetLeft;
+            const walk = x - startX;
+            el.scrollLeft = scrollLeft - walk;
+        });
+    });
+};
+

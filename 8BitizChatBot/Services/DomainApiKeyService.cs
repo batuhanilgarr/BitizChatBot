@@ -7,18 +7,21 @@ namespace BitizChatBot.Services;
 
 public class DomainApiKeyService : IDomainApiKeyService
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DomainApiKeyService> _logger;
 
-    public DomainApiKeyService(ApplicationDbContext context, ILogger<DomainApiKeyService> logger)
+    public DomainApiKeyService(IServiceScopeFactory scopeFactory, ILogger<DomainApiKeyService> logger)
     {
-        _context = context;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
     public async Task<IReadOnlyList<DomainApiKey>> GetAllAsync()
     {
-        var entities = await _context.DomainApiKeys
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var entities = await context.DomainApiKeys
             .OrderByDescending(k => k.CreatedAt)
             .ToListAsync();
 
@@ -32,8 +35,11 @@ public class DomainApiKeyService : IDomainApiKeyService
 
         var normalizedDomain = NormalizeDomain(domain);
 
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
         // Check if domain already exists
-        var existing = await _context.DomainApiKeys
+        var existing = await context.DomainApiKeys
             .FirstOrDefaultAsync(k => k.Domain == normalizedDomain);
 
         if (existing != null)
@@ -48,19 +54,22 @@ public class DomainApiKeyService : IDomainApiKeyService
             CreatedAt = DateTime.UtcNow
         };
 
-        _context.DomainApiKeys.Add(entity);
-        await _context.SaveChangesAsync();
+        context.DomainApiKeys.Add(entity);
+        await context.SaveChangesAsync();
 
         return MapToDomainApiKey(entity);
     }
 
     public async Task DeleteAsync(string id)
     {
-        var entity = await _context.DomainApiKeys.FindAsync(id);
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var entity = await context.DomainApiKeys.FindAsync(id);
         if (entity != null)
         {
-            _context.DomainApiKeys.Remove(entity);
-            await _context.SaveChangesAsync();
+            context.DomainApiKeys.Remove(entity);
+            await context.SaveChangesAsync();
         }
     }
 
@@ -70,8 +79,11 @@ public class DomainApiKeyService : IDomainApiKeyService
             return false;
 
         var normalizedDomain = NormalizeDomain(domain);
+
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         
-        return await _context.DomainApiKeys
+        return await context.DomainApiKeys
             .AnyAsync(k =>
                 k.IsActive &&
                 k.Domain == normalizedDomain &&

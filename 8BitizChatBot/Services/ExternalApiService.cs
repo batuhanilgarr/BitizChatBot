@@ -151,5 +151,38 @@ public class ExternalApiService : IExternalApiService
         public string Message { get; set; } = string.Empty;
         public List<TireDto> Data { get; set; } = new();
     }
+
+    /// <summary>
+    /// Validates brand/model pairing using Bridgestone AI Search endpoint (without year).
+    /// If the API returns a message, it is surfaced to the caller.
+    /// </summary>
+    public async Task<(bool IsMismatch, string? Message)> ValidateBrandModelAsync(string brand, string model)
+    {
+        try
+        {
+            var url = $"{BaseUrl}/Search?brand={Uri.EscapeDataString(brand)}&model={Uri.EscapeDataString(model)}";
+            _logger.LogInformation("Validating brand/model via API: {Url}", url);
+
+            var response = await _httpClient.GetAsync(url);
+            // API may return 200 with success=false; do not throw
+            var content = await response.Content.ReadAsStringAsync();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+            // Expect { success, message, data }
+            var apiResponse = JsonSerializer.Deserialize<BridgestoneTireApiResponse>(content, options);
+            var msg = apiResponse?.Message;
+
+            // Specific mismatch detection text provided by user
+            var mismatch = !string.IsNullOrWhiteSpace(msg) &&
+                           msg.Contains("markasına ait değil", StringComparison.OrdinalIgnoreCase);
+
+            return (mismatch, msg);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Brand/model validation failed; proceeding without blocking");
+            return (false, null);
+        }
+    }
 }
 

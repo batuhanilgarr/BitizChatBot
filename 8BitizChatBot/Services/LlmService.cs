@@ -1387,11 +1387,19 @@ Examples:
         var dealerKeywords = new[] { "bayi", "bayiler", "dealer", "dealers", "yetkili", "servis", "bayileri", "bayiyi" };
         var purchaseKeywords = new[] { "nereden alabilirim", "nereden alabilirim", "alabileceğim", "alabilecegim", "satın alabilirim", "satın alabilirim", "alabilirim", "nereden", "nereye", "nerede alabilirim", "nerede satın alabilirim" };
         var actionKeywords = new[] { "listele", "listeler", "göster", "bul", "bulur", "bulabilir", "bulabilir misin", "listeler misin", "gösterir misin", "listeler misin" };
+
+        // Normalize user message and keywords to catch missing Turkish accents (e.g., "yakin" -> "yakın")
+        var normalizedMessage = NormalizeForMatching(lowerMessage);
+        var locationKeywordsNorm = locationKeywords.Select(NormalizeForMatching).ToArray();
+        var dealerKeywordsNorm = dealerKeywords.Select(NormalizeForMatching).ToArray();
+        var purchaseKeywordsNorm = purchaseKeywords.Select(NormalizeForMatching).ToArray();
+        var actionKeywordsNorm = actionKeywords.Select(NormalizeForMatching).ToArray();
         
-        bool hasLocationKeyword = locationKeywords.Any(k => lowerMessage.Contains(k));
-        bool hasDealerKeyword = dealerKeywords.Any(k => lowerMessage.Contains(k));
-        bool hasPurchaseKeyword = purchaseKeywords.Any(k => lowerMessage.Contains(k));
-        bool hasActionKeyword = actionKeywords.Any(k => lowerMessage.Contains(k));
+        // Fuzzy match to tolerate minor typos like "yakn" or "yakni"
+        bool hasLocationKeyword = ContainsKeywordWithFuzzy(normalizedMessage, locationKeywordsNorm);
+        bool hasDealerKeyword = ContainsKeywordWithFuzzy(normalizedMessage, dealerKeywordsNorm);
+        bool hasPurchaseKeyword = ContainsKeywordWithFuzzy(normalizedMessage, purchaseKeywordsNorm);
+        bool hasActionKeyword = ContainsKeywordWithFuzzy(normalizedMessage, actionKeywordsNorm);
         
         _logger.LogInformation("SimpleIntentDetection - Message: {Message}, HasLocation: {HasLocation}, HasDealer: {HasDealer}, HasPurchase: {HasPurchase}, HasAction: {HasAction}", 
             userMessage, hasLocationKeyword, hasDealerKeyword, hasPurchaseKeyword, hasActionKeyword);
@@ -1622,6 +1630,99 @@ Examples:
 
         result.Intent = IntentType.GeneralQuestion;
         return result;
+    }
+
+    /// <summary>
+    /// Accent-insensitive normalization for keyword matching (e.g., "yakin" -> "yakin" matches "yakın").
+    /// Removes diacritics and maps Turkish dotted/undotted i to 'i'.
+    /// </summary>
+    private static string NormalizeForMatching(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var normalized = text.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(normalized.Length);
+        foreach (var ch in normalized)
+        {
+            var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
+            if (uc != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                var c = ch switch
+                {
+                    'ı' or 'İ' => 'i',
+                    _ => ch
+                };
+                sb.Append(char.ToLowerInvariant(c));
+            }
+        }
+        return sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+    }
+
+    /// <summary>
+    /// Checks if the normalized message contains any keyword (also normalized) with tolerance for small typos.
+    /// Uses substring containment OR Levenshtein distance <= maxDistance on words and whole message.
+    /// </summary>
+    private static bool ContainsKeywordWithFuzzy(string normalizedMessage, string[] normalizedKeywords, int maxDistance = 1)
+    {
+        if (string.IsNullOrEmpty(normalizedMessage) || normalizedKeywords.Length == 0)
+            return false;
+
+        // Quick pass: direct substring match
+        foreach (var k in normalizedKeywords)
+        {
+            if (normalizedMessage.Contains(k))
+                return true;
+        }
+
+        // Token-level fuzzy match
+        var tokens = normalizedMessage.Split(new[] { ' ', '\t', '\r', '\n', ',', '.', ';', ':', '!', '?', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var token in tokens)
+        {
+            foreach (var k in normalizedKeywords)
+            {
+                if (LevenshteinDistance(token, k) <= maxDistance)
+                    return true;
+            }
+        }
+
+        // Whole-message fuzzy match (for very short inputs)
+        if (normalizedMessage.Length <= 10)
+        {
+            foreach (var k in normalizedKeywords)
+            {
+                if (LevenshteinDistance(normalizedMessage, k) <= maxDistance)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int LevenshteinDistance(string s, string t)
+    {
+        if (string.IsNullOrEmpty(s)) return t.Length;
+        if (string.IsNullOrEmpty(t)) return s.Length;
+
+        var n = s.Length;
+        var m = t.Length;
+        var d = new int[n + 1, m + 1];
+
+        for (int i = 0; i <= n; i++) d[i, 0] = i;
+        for (int j = 0; j <= m; j++) d[0, j] = j;
+
+        for (int i = 1; i <= n; i++)
+        {
+            for (int j = 1; j <= m; j++)
+            {
+                var cost = s[i - 1] == t[j - 1] ? 0 : 1;
+                d[i, j] = Math.Min(
+                    Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
+                    d[i - 1, j - 1] + cost);
+            }
+        }
+
+        return d[n, m];
     }
 }
 

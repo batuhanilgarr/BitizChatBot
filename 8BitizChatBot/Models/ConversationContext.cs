@@ -14,5 +14,13 @@ public class ConversationContext
     public string? Model { get; set; }
     public string? Year { get; set; }
     public string? Season { get; set; }
+
+    // Validation counters
+    public int BrandModelInvalidAttempts { get; set; } = 0;
+
+    // WhatsApp follow-up flow after dealer list
+    public bool AwaitingWhatsAppConsent { get; set; } = false;
+    public bool AwaitingWhatsAppPhone { get; set; } = false;
+    public string? LastDealerSummary { get; set; }
 }
 

@@ -18,7 +18,8 @@
     <div class="chat-messages" @ref="_messagesContainer">
         @foreach (var message in _messages)
         {
-            <div class="message @(message.IsUser ? "user-message" : "bot-message")">
+            var hasCards = (message.Dealers != null && message.Dealers.Any()) || (message.Tires != null && message.Tires.Any());
+            <div class="message @(message.IsUser ? "user-message" : "bot-message") @(hasCards ? "with-cards" : string.Empty)">
                 <div class="message-content">
                     @if (message.IsLoading)
                     {
@@ -457,6 +458,10 @@
         animation: fadeIn 0.3s ease-in;
     }
 
+    .message.with-cards {
+        max-width: 100%;
+    }
+
     @@keyframes fadeIn {
         from {
             opacity: 0;
@@ -480,6 +485,10 @@
         padding: 0.75rem 1rem;
         border-radius: 12px;
         word-wrap: break-word;
+    }
+
+    .message.with-cards .message-content {
+        width: 100%;
     }
 
     .user-message .message-content {
@@ -650,10 +659,18 @@
 
     /* Dealer Cards */
     .dealers-container {
-        display: flex;
-        flex-direction: column;
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
         gap: 1rem;
         margin-top: 0.75rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 0.5rem;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: #ccc transparent;
     }
 
     .dealer-card {
@@ -663,6 +680,9 @@
         padding: 1rem;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         transition: transform 0.2s, box-shadow 0.2s;
+        width: 280px;
+        flex: 0 0 auto !important;
+        scroll-snap-align: start;
     }
 
     .dealer-card:hover {
@@ -748,10 +768,18 @@
 
     /* Tire Cards */
     .tires-container {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
         gap: 1rem;
         margin-top: 0.75rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 0.5rem;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: #ccc transparent;
     }
 
     .tire-card {
@@ -763,6 +791,9 @@
         transition: transform 0.2s, box-shadow 0.2s;
         display: flex;
         flex-direction: column;
+        width: 280px;
+        flex: 0 0 auto !important;
+        scroll-snap-align: start;
     }
 
     .tire-card:hover {
@@ -856,10 +887,6 @@
     }
 
     @@media (max-width: 768px) {
-        .tires-container {
-            grid-template-columns: 1fr;
-        }
-        
         .message {
             max-width: 85%;
         }

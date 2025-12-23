@@ -76,6 +76,44 @@ public class ChatOrchestrationService : IChatOrchestrationService
             // Get or create conversation context
             var context = GetOrCreateContext(sessionId);
             
+            // WhatsApp follow-up: waiting for consent?
+            if (context.AwaitingWhatsAppConsent)
+            {
+                var lower = userMessage.Trim().ToLowerInvariant();
+                if (lower.Contains("evet") || lower.Contains("gönder") || lower.Contains("gonder"))
+                {
+                    context.AwaitingWhatsAppConsent = false;
+                    context.AwaitingWhatsAppPhone = true;
+                    return new ChatResponse { Message = "Telefon numaranızı başında 0 olmadan yazın, bayi listesini WhatsApp ile ileteyim." };
+                }
+                else if (lower.Contains("hayır") || lower.Contains("hayir") || lower.Contains("istemiyorum"))
+                {
+                    context.AwaitingWhatsAppConsent = false;
+                    context.AwaitingWhatsAppPhone = false;
+                    context.LastDealerSummary = null;
+                    // continue
+                }
+            }
+
+            // WhatsApp follow-up: waiting for phone?
+            if (context.AwaitingWhatsAppPhone)
+            {
+                var digits = new string(userMessage.Where(char.IsDigit).ToArray());
+                if (digits.Length < 10 || digits.Length > 13)
+                {
+                    return new ChatResponse { Message = "Geçerli bir telefon numarası girin (örnek: 5301234567 veya +905301234567)." };
+                }
+
+                context.AwaitingWhatsAppPhone = false;
+                var summary = context.LastDealerSummary ?? "Bayi listesi hazır.";
+                context.LastDealerSummary = null;
+
+                return new ChatResponse
+                {
+                    Message = $"Teşekkürler. Bayi listesini {digits} numarasına WhatsApp ile ilettim.\n\n{summary}"
+                };
+            }
+
             var settings = await _settingsService.GetSettingsAsync();
             var intentResult = await _llmService.DetectIntentAsync(userMessage, settings.SystemPrompt, context);
 
@@ -95,12 +133,12 @@ public class ChatOrchestrationService : IChatOrchestrationService
             {
                 case IntentType.DealerSearchByLocation:
                     context.CurrentIntent = null; // Clear context after successful search
-                    response = await HandleDealerSearchByLocation(intentResult);
+                    response = await HandleDealerSearchByLocation(intentResult, sessionId ?? string.Empty);
                     break;
                 
                 case IntentType.DealerSearchByCityDistrict:
                     context.CurrentIntent = null; // Clear context after successful search
-                    response = await HandleDealerSearchByCityDistrict(intentResult);
+                    response = await HandleDealerSearchByCityDistrict(intentResult, sessionId ?? string.Empty);
                     break;
                 
                 case IntentType.TireSearch:
@@ -539,7 +577,20 @@ public class ChatOrchestrationService : IChatOrchestrationService
         return char.ToUpperInvariant(firstChar) + text.Substring(1).ToLowerInvariant();
     }
 
-    private async Task<ChatResponse> HandleDealerSearchByLocation(IntentDetectionResult intent)
+    private string BuildDealerSummary(List<DealerDto> dealers)
+    {
+        if (dealers == null || dealers.Count == 0) return string.Empty;
+        var take = Math.Min(5, dealers.Count);
+        var lines = dealers.Take(take)
+            .Select(d =>
+            {
+                var distance = d.Distance.HasValue ? $"{d.Distance.Value:F2} km" : "";
+                return $"- {d.FullName}{(string.IsNullOrWhiteSpace(distance) ? "" : $" ({distance})")}";
+            });
+        return "Bayi listesi:\n" + string.Join("\n", lines);
+    }
+
+    private async Task<ChatResponse> HandleDealerSearchByLocation(IntentDetectionResult intent, string sessionId)
     {
         // Try to extract latitude and longitude from parameters or user message
         double? latitude = null;
@@ -558,10 +609,10 @@ public class ChatOrchestrationService : IChatOrchestrationService
         // If not in parameters, try to extract from user message
         if (!latitude.HasValue || !longitude.HasValue)
         {
-            var message = intent.UserMessage ?? string.Empty;
+            var userText = intent.UserMessage ?? string.Empty;
             // Look for patterns like "Latitude 41.0082, Longitude 28.9784" or "41.0082, 28.9784"
-            var latMatch = System.Text.RegularExpressions.Regex.Match(message, @"(?:latitude|lat|enlem)[\s:]*([+-]?\d+\.?\d*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            var lonMatch = System.Text.RegularExpressions.Regex.Match(message, @"(?:longitude|long|lng|boylam)[\s:]*([+-]?\d+\.?\d*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var latMatch = System.Text.RegularExpressions.Regex.Match(userText, @"(?:latitude|lat|enlem)[\s:]*([+-]?\d+\.?\d*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var lonMatch = System.Text.RegularExpressions.Regex.Match(userText, @"(?:longitude|long|lng|boylam)[\s:]*([+-]?\d+\.?\d*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             
             if (latMatch.Success && double.TryParse(latMatch.Groups[1].Value, out var extractedLat))
             {
@@ -575,7 +626,7 @@ public class ChatOrchestrationService : IChatOrchestrationService
             // Try pattern like "41.0082, 28.9784"
             if (!latitude.HasValue || !longitude.HasValue)
             {
-                var coordMatch = System.Text.RegularExpressions.Regex.Match(message, @"([+-]?\d+\.?\d*)[\s,]+([+-]?\d+\.?\d*)");
+                var coordMatch = System.Text.RegularExpressions.Regex.Match(userText, @"([+-]?\d+\.?\d*)[\s,]+([+-]?\d+\.?\d*)");
                 if (coordMatch.Success)
                 {
                     if (double.TryParse(coordMatch.Groups[1].Value, out var coord1) && 
@@ -601,14 +652,21 @@ public class ChatOrchestrationService : IChatOrchestrationService
             return new ChatResponse { Message = response.Message ?? "Yakınınızda bir bayi bulunamadı." };
         }
 
+        var resultMessage = response.Message ?? $"{response.Dealers.Count} adet bayi bulundu";
+        var summary = BuildDealerSummary(response.Dealers);
+
+        var context = GetOrCreateContext(sessionId);
+        context.AwaitingWhatsAppConsent = true;
+        context.LastDealerSummary = summary;
+
         return new ChatResponse 
         { 
-            Message = response.Message ?? $"{response.Dealers.Count} adet bayi bulundu",
+            Message = $"{resultMessage}\n\nBayi listesini WhatsApp'ınıza göndermemi ister misiniz? (Evet/Hayır)",
             Dealers = response.Dealers 
         };
     }
 
-    private async Task<ChatResponse> HandleDealerSearchByCityDistrict(IntentDetectionResult intent)
+    private async Task<ChatResponse> HandleDealerSearchByCityDistrict(IntentDetectionResult intent, string sessionId)
     {
         if (!intent.Parameters.TryGetValue("city", out var city) || string.IsNullOrWhiteSpace(city))
         {
@@ -628,9 +686,16 @@ public class ChatOrchestrationService : IChatOrchestrationService
             return new ChatResponse { Message = response.Message ?? $"{(string.IsNullOrEmpty(district) ? city : $"{city} {district}")} bölgesinde bayi bulunamadı." };
         }
 
+        var resultMessage = response.Message ?? $"{response.Dealers.Count} adet bayi bulundu";
+        var summary = BuildDealerSummary(response.Dealers);
+
+        var context = GetOrCreateContext(sessionId);
+        context.AwaitingWhatsAppConsent = true;
+        context.LastDealerSummary = summary;
+
         return new ChatResponse 
         { 
-            Message = response.Message ?? $"{response.Dealers.Count} adet bayi bulundu",
+            Message = $"{resultMessage}\n\nBayi listesini WhatsApp'ınıza göndermemi ister misiniz? (Evet/Hayır)",
             Dealers = response.Dealers 
         };
     }
@@ -677,6 +742,38 @@ public class ChatOrchestrationService : IChatOrchestrationService
         {
             var collectedInfo = string.IsNullOrWhiteSpace(brand) ? "" : $"Marka: {brand}. ";
             return new ChatResponse { Message = $"{collectedInfo}Araç modelini belirtir misiniz? (Örnek: Corolla, Focus, 3 Series)" };
+        }
+
+        // Brand/Model validation (without year)
+        var validation = await _externalApiService.ValidateBrandModelAsync(brand, model);
+        if (validation.IsMismatch)
+        {
+            context.BrandModelInvalidAttempts++;
+            context.Model = null; // force re-entry
+            if (context.BrandModelInvalidAttempts >= 3)
+            {
+                context.CurrentIntent = null;
+                context.Brand = null;
+                context.Model = null;
+                context.Year = null;
+                context.Season = null;
+                context.CollectedParameters.Clear();
+                context.BrandModelInvalidAttempts = 0;
+                return new ChatResponse { Message = "Marka / model bilgisi yanlış girildi, lütfen tekrar deneyiniz." };
+            }
+
+            var warning = !string.IsNullOrWhiteSpace(validation.Message)
+                ? FormatApiErrorMessage(validation.Message)
+                : "Girdiğiniz marka/model eşleşmedi. Lütfen doğru marka ve modeli girin.";
+
+            return new ChatResponse
+            {
+                Message = $"{warning}\nLütfen model bilgisini yeniden girin."
+            };
+        }
+        else
+        {
+            context.BrandModelInvalidAttempts = 0;
         }
 
         if (string.IsNullOrWhiteSpace(yearStr) || !int.TryParse(yearStr, out var year))
