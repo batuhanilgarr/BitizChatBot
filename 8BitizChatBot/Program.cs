@@ -14,6 +14,9 @@ builder.Services.AddControllers();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
+// Factory needed for services that create contexts on demand (e.g., DomainApiKeyService)
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseSqlServer(connectionString));
 
 // Register Services
 builder.Services.AddHttpContextAccessor();
