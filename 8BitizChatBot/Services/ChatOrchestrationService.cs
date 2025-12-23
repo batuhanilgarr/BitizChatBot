@@ -577,21 +577,68 @@ public class ChatOrchestrationService : IChatOrchestrationService
         return char.ToUpperInvariant(firstChar) + text.Substring(1).ToLowerInvariant();
     }
 
-    private bool IsAffirmative(string lower)
+    private bool IsAffirmative(string input)
     {
-        return lower.Contains("evet") ||
-               lower.Contains("gönder") || lower.Contains("gonder") ||
-               lower.Contains("yolla") || lower.Contains("gönderin") || lower.Contains("gonderin") ||
-               lower.Contains("olur") || lower.Contains("tamam") || lower.Contains("ok") || lower.Contains("okey") ||
-               lower.Contains("isterim") || lower.Contains("tabii") || lower.Contains("elbette");
+        var norm = NormalizeForMatch(input);
+        var positives = new[]
+        {
+            "evet","gonder","gonderin","gonderin","yolla","olur","tamam","ok","okey",
+            "isterim","tabii","tabi","elbette","aynendir","aynen","tesekkurler","teşekkürler"
+        };
+        return positives.Any(p => norm.Contains(p) || LevenshteinDistance(norm, p) <= 1);
     }
 
-    private bool IsNegative(string lower)
+    private bool IsNegative(string input)
     {
-        return lower.Contains("hayır") || lower.Contains("hayir") ||
-               lower.Contains("istemiyorum") || lower.Contains("yok") ||
-               lower.Contains("gerek yok") || lower.Contains("kapat") ||
-               lower.Contains("no");
+        var norm = NormalizeForMatch(input);
+        var negatives = new[]
+        {
+            "hayir","hayır","istemiyorum","yok","gerek yok","kapat","no","olmaz","hayda"
+        };
+        return negatives.Any(n => norm.Contains(n) || LevenshteinDistance(norm, n) <= 1);
+    }
+
+    private string NormalizeForMatch(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var normalized = text.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(normalized.Length);
+        foreach (var ch in normalized)
+        {
+            var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
+            if (uc != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                var c = ch switch
+                {
+                    'ı' or 'İ' => 'i',
+                    _ => ch
+                };
+                sb.Append(char.ToLowerInvariant(c));
+            }
+        }
+        return sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+    }
+
+    private int LevenshteinDistance(string s, string t)
+    {
+        if (string.IsNullOrEmpty(s)) return t.Length;
+        if (string.IsNullOrEmpty(t)) return s.Length;
+        var n = s.Length;
+        var m = t.Length;
+        var d = new int[n + 1, m + 1];
+        for (int i = 0; i <= n; i++) d[i, 0] = i;
+        for (int j = 0; j <= m; j++) d[0, j] = j;
+        for (int i = 1; i <= n; i++)
+        {
+            for (int j = 1; j <= m; j++)
+            {
+                var cost = s[i - 1] == t[j - 1] ? 0 : 1;
+                d[i, j] = Math.Min(
+                    Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
+                    d[i - 1, j - 1] + cost);
+            }
+        }
+        return d[n, m];
     }
 
     private string BuildDealerSummary(List<DealerDto> dealers)
