@@ -11,10 +11,6 @@
 @inject ILogger<ChatWidget> Logger
 @rendermode RenderMode.InteractiveServer
 
-@code {
-    [Parameter] public bool ForceOpen { get; set; }
-}
-
 @if (_isOpen)
 {
     <div class="chat-widget-container">
@@ -437,6 +433,8 @@
 </button>
 
 @code {
+    [Parameter] public bool ForceOpen { get; set; }
+
     private List<ChatMessage> _messages = new();
     private ChatInputModel _inputModel = new();
     private bool _isProcessing = false;
@@ -458,12 +456,19 @@
     private bool _showTypingIndicator = false;
     private bool _soundEnabled = true;
 
+    protected override void OnParametersSet()
+    {
+        if (ForceOpen)
+        {
+            _isOpen = true;
+        }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             await LoadAppearanceSettings();
-            _isOpen = ForceOpen || _isOpen;
             await LoadChatSessionFromStorage();
             await Task.Delay(100); // Wait for DOM to update
             await ScrollToBottom();
@@ -491,7 +496,7 @@
             _secondaryColor = domainAppearance.SecondaryColor;
             _isOnline = domainAppearance.ChatbotOnline;
             _quickReplies = domainAppearance.QuickReplies ?? new List<string>();
-            _isOpen = domainAppearance.OpenChatOnLoad;
+            _isOpen = ForceOpen || domainAppearance.OpenChatOnLoad;
             
             // Calculate darker shade for gradient
             _primaryColorDark = DarkenColor(_primaryColor, 0.1);

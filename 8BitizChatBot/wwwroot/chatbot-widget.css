@@ -1200,32 +1200,3 @@
         height: 18px !important;
     }
 }
-
-.embed-mode {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: transparent !important;
-}
-
-.embed-mode .chat-widget-toggle {
-    display: none !important;
-}
-
-.embed-mode .chat-widget-container {
-    position: relative !important;
-    bottom: auto !important;
-    right: auto !important;
-    left: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    animation: none !important;
-}
-
