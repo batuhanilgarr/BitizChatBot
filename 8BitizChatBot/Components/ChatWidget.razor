@@ -11,6 +11,10 @@
 @inject ILogger<ChatWidget> Logger
 @rendermode RenderMode.InteractiveServer
 
+@code {
+    [Parameter] public bool ForceOpen { get; set; }
+}
+
 @if (_isOpen)
 {
     <div class="chat-widget-container">
@@ -459,6 +463,7 @@
         if (firstRender)
         {
             await LoadAppearanceSettings();
+            _isOpen = ForceOpen || _isOpen;
             await LoadChatSessionFromStorage();
             await Task.Delay(100); // Wait for DOM to update
             await ScrollToBottom();
