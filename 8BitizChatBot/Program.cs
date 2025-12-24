@@ -87,6 +87,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UsePathBase("/chatbot");
 app.UseStaticFiles();
 app.UseAntiforgery();
 app.UseSession();
