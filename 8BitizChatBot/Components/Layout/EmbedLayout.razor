@@ -13,8 +13,8 @@
 @code {
     private string GetCssUrl()
     {
-        var baseUrl = Configuration["BaseUrl"] ?? NavManager.BaseUri.TrimEnd('/');
+        var baseUri = NavManager.BaseUri.TrimEnd('/');
         // Mutlak URL kullanarak CSS'in her zaman yüklenmesini sağla
-        return $"{baseUrl}/chatbot-widget.css";
+        return $"{baseUri}/chatbot-widget.css";
     }
 }

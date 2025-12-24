@@ -1450,50 +1450,59 @@
     protected override async Task OnInitializedAsync()
     {
         _baseUrl = Configuration["BaseUrl"] ?? "https://chatdemo.bridgestone.com.tr";
-        await LoadSettings();
-        await LoadDomainKeys();
+        
+        // Server-side session'dan authentication kontrolü - sayfa render edilmeden önce
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            var session = httpContext.Session;
+            var isAuthenticated = session.GetString("AdminAuthenticated");
+            var userId = session.GetInt32("AdminUserId");
+            
+            if (isAuthenticated == "true" && userId.HasValue)
+            {
+                // Session'dan kullanıcı bilgisini yükle
+                try
+                {
+                    var user = await UserService.GetByIdAsync(userId.Value);
+                    if (user != null && user.IsActive && user.IsAdmin)
+                    {
+                        _isAuthenticated = true;
+                        _currentUser = user;
+                    }
+                    else
+                    {
+                        // Kullanıcı artık aktif değilse session'ı temizle
+                        session.Clear();
+                    }
+                }
+                catch
+                {
+                    // Hata durumunda session'ı temizle
+                    session.Clear();
+                }
+            }
+        }
+        
+        _authChecked = true;
+        
+        // Sadece authenticated ise settings yükle
+        if (_isAuthenticated)
+        {
+            _isLoading = true;
+            await LoadSettings();
+            await LoadDomainKeys();
+        }
+        else
+        {
+            // Authenticated değilse loading'i false yap
+            _isLoading = false;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-        {
-            // Server-side session'dan authentication kontrolü
-            var httpContext = HttpContextAccessor.HttpContext;
-            if (httpContext != null)
-            {
-                var session = httpContext.Session;
-                var isAuthenticated = session.GetString("AdminAuthenticated");
-                var userId = session.GetInt32("AdminUserId");
-                
-                if (isAuthenticated == "true" && userId.HasValue)
-                {
-                    // Session'dan kullanıcı bilgisini yükle
-                    try
-                    {
-                        var user = await UserService.GetByIdAsync(userId.Value);
-                        if (user != null && user.IsActive && user.IsAdmin)
-                        {
-                            _isAuthenticated = true;
-                            _currentUser = user;
-                        }
-                        else
-                        {
-                            // Kullanıcı artık aktif değilse session'ı temizle
-                            session.Clear();
-                        }
-                    }
-                    catch
-                    {
-                        // Hata durumunda session'ı temizle
-                        session.Clear();
-                    }
-                }
-            }
-            
-            _authChecked = true;
-            StateHasChanged();
-        }
+        // Artık authentication kontrolü OnInitializedAsync'de yapılıyor
     }
 
     private async Task LoadSettings()
@@ -1543,15 +1552,23 @@
 
     private async Task HandleCopyScript(string domain, string apiKey)
     {
-        var script = $@"<script>
-    window.BridgestoneChatbotConfig = {{
-        baseUrl: '{_baseUrl}',
-        apiKey: '{apiKey}',
-        domain: '{domain}',
-        delay: 2000
-    }};
-</script>
-<script src=""{_baseUrl}/chatbot-embed.js""></script>";
+        // baseUrl'den trailing slash'i temizle ve /chatbot path'ini kontrol et
+        var baseUrl = _baseUrl.TrimEnd('/');
+        if (!baseUrl.EndsWith("/chatbot", StringComparison.OrdinalIgnoreCase))
+        {
+            baseUrl += "/chatbot";
+        }
+        
+        var script =
+            "<script>\n" +
+            "    window.BridgestoneChatbotConfig = {\n" +
+            $"        baseUrl: '{baseUrl}',\n" +
+            $"        apiKey: '{apiKey}',\n" +
+            $"        domain: '{domain}',\n" +
+            "        delay: 2000\n" +
+            "    };\n" +
+            "</script>\n" +
+            $"<script src=\"{baseUrl}/chatbot-embed.js\"></script>";
 
         try
         {

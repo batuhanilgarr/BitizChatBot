@@ -76,18 +76,33 @@ public class DomainApiKeyService : IDomainApiKeyService
     public async Task<bool> ValidateAsync(string domain, string apiKey)
     {
         if (string.IsNullOrWhiteSpace(domain) || string.IsNullOrWhiteSpace(apiKey))
+        {
+            _logger.LogWarning("ValidateAsync: Empty domain or apiKey. Domain: {Domain}, ApiKey: {ApiKey}", domain, string.IsNullOrWhiteSpace(apiKey) ? "empty" : "provided");
             return false;
+        }
 
         var normalizedDomain = NormalizeDomain(domain);
+        _logger.LogInformation("ValidateAsync: Domain={Domain}, Normalized={Normalized}, ApiKey={ApiKey}", domain, normalizedDomain, apiKey.Length > 10 ? apiKey.Substring(0, 10) + "..." : apiKey);
 
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         
-        return await context.DomainApiKeys
-            .AnyAsync(k =>
-                k.IsActive &&
-                k.Domain == normalizedDomain &&
-                k.ApiKey == apiKey);
+        var keys = await context.DomainApiKeys
+            .Where(k => k.IsActive && k.Domain == normalizedDomain)
+            .ToListAsync();
+        
+        _logger.LogInformation("ValidateAsync: Found {Count} active keys for domain {Domain}", keys.Count, normalizedDomain);
+        
+        var isValid = keys.Any(k => k.ApiKey == apiKey);
+        
+        if (!isValid && keys.Any())
+        {
+            _logger.LogWarning("ValidateAsync: API key mismatch. Expected one of {Keys}, got {Provided}", 
+                string.Join(", ", keys.Select(k => k.ApiKey.Length > 10 ? k.ApiKey.Substring(0, 10) + "..." : k.ApiKey)), 
+                apiKey.Length > 10 ? apiKey.Substring(0, 10) + "..." : apiKey);
+        }
+        
+        return isValid;
     }
 
     private static string NormalizeDomain(string domain)

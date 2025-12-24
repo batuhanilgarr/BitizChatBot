@@ -11,7 +11,7 @@
 
 <div class="chat-container">
     <div class="chat-header">
-        <h1>💬 Bridgestone Chatbot</h1>
+        <h1><i class="fa-solid fa-comments"></i> Bridgestone Chatbot</h1>
         <p class="subtitle">Ask me about dealers, tires, and more!</p>
     </div>
 
@@ -34,7 +34,7 @@
                     else if (!string.IsNullOrEmpty(message.ErrorMessage))
                     {
                         <div class="error-message">
-                            <strong>⚠️ Error:</strong> @message.ErrorMessage
+                            <strong><i class="fa-solid fa-triangle-exclamation"></i> Error:</strong> @message.ErrorMessage
                         </div>
                     }
                     else
@@ -61,24 +61,24 @@
                                         </div>
                                         <div class="dealer-info">
                                             <div class="dealer-address">
-                                                <span class="icon">📍</span>
+                                                <span class="icon"><i class="fa-solid fa-location-dot"></i></span>
                                                 <span>@dealer.FullAddress</span>
                                             </div>
                                             <div class="dealer-location">
-                                                <span class="icon">🏙️</span>
+                                                <span class="icon"><i class="fa-solid fa-city"></i></span>
                                                 <span>@dealer.Il @dealer.Ilce</span>
                                             </div>
                                             @if (!string.IsNullOrEmpty(dealer.Telefon1))
                                             {
                                                 <div class="dealer-phone">
-                                                    <span class="icon">📞</span>
+                                                    <span class="icon"><i class="fa-solid fa-phone"></i></span>
                                                     <a href="tel:@dealer.Telefon1">@dealer.Telefon1</a>
                                                 </div>
                                             }
                                             @if (!string.IsNullOrEmpty(dealer.Email))
                                             {
                                                 <div class="dealer-email">
-                                                    <span class="icon">✉️</span>
+                                                    <span class="icon"><i class="fa-solid fa-envelope"></i></span>
                                                     <a href="mailto:@dealer.Email">@dealer.Email</a>
                                                 </div>
                                             }
@@ -87,7 +87,7 @@
                                         {
                                             <div class="dealer-actions">
                                                 <a href="@dealer.GoogleMapsUrl" target="_blank" class="btn-maps">
-                                                    🗺️ Haritada Göster
+                                                    <i class="fa-solid fa-map"></i> Haritada Göster
                                                 </a>
                                             </div>
                                         }
@@ -113,7 +113,7 @@
                                         @if (!string.IsNullOrEmpty(tire.AvailableSizes))
                                         {
                                             <div class="tire-sizes">
-                                                <span class="icon">📏</span>
+                                                <span class="icon"><i class="fa-solid fa-ruler"></i></span>
                                                 <span>@tire.AvailableSizes</span>
                                             </div>
                                         }
@@ -137,7 +137,7 @@
                         {
                             <div class="location-button-container">
                                 <button class="btn-location" @onclick="() => RequestLocation()">
-                                    📍 Konumumu Paylaş
+                                    <i class="fa-solid fa-location-dot"></i> Konumumu Paylaş
                                 </button>
                             </div>
                         }
@@ -164,11 +164,11 @@
                         disabled="@(_isProcessing || string.IsNullOrWhiteSpace(_inputModel.Message))">
                     @if (_isProcessing)
                     {
-                        <span>⏳</span>
+                        <span><i class="fa-solid fa-hourglass-half"></i></span>
                     }
                     else
                     {
-                        <span>📤</span>
+                        <span><i class="fa-solid fa-paper-plane"></i></span>
                     }
                 </button>
             </div>
@@ -329,7 +329,7 @@
                 // Add user message showing location was shared
                 var userMsg = new ChatMessage
                 {
-                    Content = $"📍 Konumum paylaşıldı",
+                    Content = $"<i class=\"fa-solid fa-location-dot\"></i> Konumum paylaşıldı",
                     IsUser = true,
                     Timestamp = DateTime.UtcNow
                 };
@@ -886,10 +886,5 @@
         background: #5568d3;
     }
 
-    @@media (max-width: 768px) {
-        .message {
-            max-width: 85%;
-        }
-    }
 </style>
 

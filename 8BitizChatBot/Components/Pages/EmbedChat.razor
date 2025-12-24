@@ -8,12 +8,10 @@
 @inject NavigationManager NavManager
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
+@inject IHttpContextAccessor HttpContextAccessor
+@inject ILogger<EmbedChat> Logger
 @rendermode RenderMode.InteractiveServer
 @layout EmbedLayout
-
-<HeadContent>
-    <link rel="stylesheet" href="@GetCssUrl()" />
-</HeadContent>
 
 @if (_isAuthorized)
 {
@@ -43,7 +41,7 @@ else if (_checked)
             border-bottom:3px solid #dc143c;
             font-weight:600;">
             <span>Bridgestone Chatbot</span>
-            <span style="font-size:1rem; opacity:0.8;">🔒</span>
+            <span style="font-size:1rem; opacity:0.8;"><i class="fa-solid fa-lock"></i></span>
         </div>
         <div style="
             flex:1;
@@ -72,52 +70,78 @@ else if (_checked)
         var uri = new Uri(NavManager.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
         var apiKey = query.Get("apiKey") ?? string.Empty;
-        var domain = query.Get("domain") ?? uri.Host;
 
-        _isAuthorized = await DomainApiKeyService.ValidateAsync(domain, apiKey);
+        Logger.LogInformation("EmbedChat.OnInitializedAsync: URI={Uri}, ApiKey={ApiKey}", NavManager.Uri, apiKey.Length > 10 ? apiKey.Substring(0, 10) + "..." : apiKey);
+
+        // Priority 1: Query string'den domain al (iframe embed script'inden gelir, güvenilir)
+        // Blazor InteractiveServer modunda WebSocket bağlantısı sonrası Origin header'ı
+        // Blazor server'ın kendi URL'sini gösterir, bu yüzden query string'e öncelik vermeliyiz
+        string? domain = query.Get("domain");
+        Logger.LogInformation("EmbedChat: Domain from query string={Domain}", domain ?? "null");
+
+        var httpContext = HttpContextAccessor.HttpContext;
+        var origin = httpContext?.Request.Headers.Origin.ToString();
+        var referer = httpContext?.Request.Headers.Referer.ToString();
+
+        Logger.LogInformation("EmbedChat: Origin={Origin}, Referer={Referer}", origin ?? "null", referer ?? "null");
+
+        // Priority 2: Eğer query string'de domain yoksa, Origin/Referer'dan al
+        // Ancak Origin'in Blazor server'ın kendi URL'si olmadığından emin ol
+        if (string.IsNullOrWhiteSpace(domain))
+        {
+            string? originOrReferer = !string.IsNullOrWhiteSpace(origin) ? origin : referer;
+            if (!string.IsNullOrWhiteSpace(originOrReferer) && Uri.TryCreate(originOrReferer, UriKind.Absolute, out var originUri))
+            {
+                var originHost = originUri.Host;
+                var currentHost = uri.Host;
+                
+                // Origin'in Blazor server'ın kendi URL'si olmadığından emin ol
+                if (originHost != currentHost)
+                {
+                    domain = originHost;
+                    Logger.LogInformation("EmbedChat: Domain from Origin/Referer={Domain} (different from server host)", domain);
+                }
+                else
+                {
+                    Logger.LogInformation("EmbedChat: Origin matches server host, ignoring Origin header");
+                }
+            }
+        }
+
+        // Priority 3: Referer'dan al (eğer query string ve Origin'de yoksa)
+        if (string.IsNullOrWhiteSpace(domain) && !string.IsNullOrWhiteSpace(referer))
+        {
+            if (Uri.TryCreate(referer, UriKind.Absolute, out var refererUri))
+            {
+                var refererHost = refererUri.Host;
+                var currentHost = uri.Host;
+                
+                // Referer'ın Blazor server'ın kendi URL'si olmadığından emin ol
+                if (refererHost != currentHost)
+                {
+                    domain = refererHost;
+                    Logger.LogInformation("EmbedChat: Domain from Referer URI={Domain} (different from server host)", domain);
+                }
+            }
+        }
+
+        // Priority 4: Son fallback - current URI'den (sadece test amaçlı)
+        if (string.IsNullOrWhiteSpace(domain))
+        {
+            domain = uri.Host;
+            Logger.LogInformation("EmbedChat: Domain from current URI={Domain} (fallback)", domain);
+        }
+
+        Logger.LogInformation("EmbedChat: Final domain={Domain}, ApiKey={ApiKey}", domain ?? "null", apiKey.Length > 10 ? apiKey.Substring(0, 10) + "..." : apiKey);
+
+        _isAuthorized = await DomainApiKeyService.ValidateAsync(domain ?? string.Empty, apiKey);
+        Logger.LogInformation("EmbedChat: Validation result={IsAuthorized}", _isAuthorized);
         _checked = true;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-        {
-            // CSS'i JavaScript ile dinamik olarak yükle (host sayfa CSS'lerinden sonra)
-            // CSS yüklendikten sonra tekrar render et
-            var cssUrl = GetCssUrl();
-            await JSRuntime.InvokeVoidAsync("eval", $@"
-                (function() {{
-                    // Önce mevcut Bootstrap ve app.css linklerini kaldır (eğer varsa)
-                    var existingBootstrap = document.querySelector('link[href*=""bootstrap""]');
-                    if (existingBootstrap) existingBootstrap.remove();
-                    var existingAppCss = document.querySelector('link[href=""app.css""]');
-                    if (existingAppCss) existingAppCss.remove();
-                    
-                    // Chatbot CSS'ini yükle
-                    if (!document.getElementById('chatbot-widget-css')) {{
-                        var link = document.createElement('link');
-                        link.id = 'chatbot-widget-css';
-                        link.rel = 'stylesheet';
-                        link.type = 'text/css';
-                        link.href = '{cssUrl}';
-                        link.media = 'all';
-                        // CSS yüklendikten sonra callback
-                        link.onload = function() {{
-                            console.log('Chatbot CSS loaded successfully');
-                            // CSS yüklendi, tüm stilleri zorla uygula
-                            var style = document.createElement('style');
-                            style.textContent = '/* Force CSS application */';
-                            document.head.appendChild(style);
-                        }};
-                        link.onerror = function() {{
-                            console.error('Failed to load chatbot CSS from: {cssUrl}');
-                        }};
-                        // CSS'i head'in en sonuna ekle (en yüksek öncelik)
-                        document.head.appendChild(link);
-                    }}
-                }})();
-            ");
-        }
+        await Task.CompletedTask;
     }
 
     private string GetCssUrl()
