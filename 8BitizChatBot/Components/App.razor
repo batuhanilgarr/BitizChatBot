@@ -8,23 +8,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Preconnect to FontAwesome CDNs -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
+    <!-- FontAwesome from cdnjs - most reliable for fonts -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     @* Bootstrap ve app.css sadece embed route'u dışında yükle *@
     <script>
-        // Embed route kontrolü - Bootstrap ve app.css'i yükleme
-        var pathname = window.location.pathname || '';
-        var isEmbedRoute = pathname === '/embed' || pathname.endsWith('/embed');
-        if (!isEmbedRoute) {
-            var bootstrapLink = document.createElement('link');
-            bootstrapLink.rel = 'stylesheet';
-            bootstrapLink.href = 'bootstrap/bootstrap.min.css';
-            document.head.appendChild(bootstrapLink);
+        // FontAwesome'u embed route için de yükle
+        (function() {
+            var pathname = window.location.pathname || '';
+            var isEmbedRoute = pathname === '/embed' || pathname.endsWith('/embed') || pathname.includes('/chatbot/embed');
             
-            var appCssLink = document.createElement('link');
-            appCssLink.rel = 'stylesheet';
-            appCssLink.href = 'app.css';
-            document.head.appendChild(appCssLink);
-        }
+            // FontAwesome yükleme kontrolü - embed route için de çalışsın
+            function ensureFontAwesome() {
+                if (!document.querySelector('link[href*="font-awesome"]') && !document.querySelector('link[href*="fontawesome"]') && !document.querySelector('link[href*="fortawesome"]')) {
+                    var faLink = document.createElement('link');
+                    faLink.rel = 'stylesheet';
+                    faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';
+                    faLink.crossOrigin = 'anonymous';
+                    faLink.referrerPolicy = 'no-referrer';
+                    document.head.insertBefore(faLink, document.head.firstChild);
+                }
+            }
+            ensureFontAwesome();
+            
+            // Bootstrap ve app.css sadece embed route dışında yükle
+            if (!isEmbedRoute) {
+                var bootstrapLink = document.createElement('link');
+                bootstrapLink.rel = 'stylesheet';
+                bootstrapLink.href = 'bootstrap/bootstrap.min.css';
+                document.head.appendChild(bootstrapLink);
+                
+                var appCssLink = document.createElement('link');
+                appCssLink.rel = 'stylesheet';
+                appCssLink.href = 'app.css';
+                document.head.appendChild(appCssLink);
+            }
+        })();
     </script>
     <HeadOutlet />
 </head>
@@ -50,8 +73,14 @@
         window.getCurrentLocation = () => {
             return new Promise((resolve) => {
                 if (!navigator.geolocation) {
-                    resolve({ success: false, error: 'Geolocation is not supported by your browser' });
+                    resolve({ success: false, error: 'Tarayıcınız konum servisini desteklemiyor' });
                     return;
+                }
+
+                // Check if we're in an iframe and if geolocation is allowed
+                var isInIframe = window.self !== window.top;
+                if (isInIframe) {
+                    console.log('Geolocation request from iframe');
                 }
 
                 navigator.geolocation.getCurrentPosition(
@@ -63,14 +92,31 @@
                         });
                     },
                     (error) => {
+                        var errorMessage = 'Konum izni verilmedi veya konum alınamadı';
+                        
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = 'Konum izni reddedildi. Lütfen tarayıcı ayarlarından konum iznini etkinleştirin.';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = 'Konum bilgisi alınamadı. GPS veya ağ bağlantınızı kontrol edin.';
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = 'Konum isteği zaman aşımına uğradı. Lütfen tekrar deneyin.';
+                                break;
+                            default:
+                                errorMessage = error.message || 'Konum alınırken bir hata oluştu.';
+                                break;
+                        }
+                        
                         resolve({
                             success: false,
-                            error: error.message || 'Location access denied'
+                            error: errorMessage
                         });
                     },
                     {
                         enableHighAccuracy: true,
-                        timeout: 10000,
+                        timeout: 15000,
                         maximumAge: 0
                     }
                 );

@@ -30,7 +30,7 @@
         else if (!_isAuthenticated)
         {
             <div class="login-card">
-                <h2>🔐 Admin Girişi</h2>
+                <h2><i class="fa-solid fa-lock"></i> Admin Girişi</h2>
                 <p>Lütfen admin kullanıcı adı ve şifrenizi girin.</p>
                 <EditForm Model="@_loginModel" OnValidSubmit="HandleLogin">
                     <DataAnnotationsValidator />
@@ -57,32 +57,32 @@
 
         <div class="admin-header">
             <div>
-                <h1>🔧 Admin Dashboard</h1>
+                <h1><i class="fa-solid fa-gear"></i> Admin Dashboard</h1>
                 <p class="subtitle">LLM Provider & Chatbot Configuration</p>
             </div>
             <button class="btn btn-secondary" @onclick="HandleLogout" style="margin-left: auto;">
-                🚪 Çıkış Yap
+                <i class="fa-solid fa-right-from-bracket"></i> Çıkış Yap
             </button>
         </div>
 
         <div class="tabs">
             <button class="tab-button @(_activeTab == "llm" ? "active" : "")" @onclick='async () => await SetActiveTab("llm")'>
-                🤖 LLM Settings
+                <i class="fa-solid fa-robot"></i> LLM Settings
             </button>
             <button class="tab-button @(_activeTab == "appearance" ? "active" : "")" @onclick='async () => await SetActiveTab("appearance")'>
-                🎨 Chatbot Appearance
+                <i class="fa-solid fa-palette"></i> Chatbot Appearance
             </button>
             <button class="tab-button @(_activeTab == "domains" ? "active" : "")" @onclick='async () => await SetActiveTab("domains")'>
-                🌐 Domain & API Keys
+                <i class="fa-solid fa-globe"></i> Domain & API Keys
             </button>
             <button class="tab-button @(_activeTab == "users" ? "active" : "")" @onclick='async () => await SetActiveTab("users")'>
-                👥 Kullanıcı Yönetimi
+                <i class="fa-solid fa-users"></i> Kullanıcı Yönetimi
             </button>
             <button class="tab-button @(_activeTab == "logs" ? "active" : "")" @onclick='async () => await SetActiveTab("logs")'>
-                📋 Audit Logs
+                <i class="fa-solid fa-clipboard-list"></i> Audit Logs
             </button>
             <button class="tab-button @(_activeTab == "analytics" ? "active" : "")" @onclick='async () => await SetActiveTab("analytics")'>
-                📊 Analytics
+                <i class="fa-solid fa-chart-bar"></i> Analytics
             </button>
         </div>
 
@@ -96,13 +96,13 @@
         else if (_showSuccess)
         {
             <div class="alert alert-success">
-                <strong>✓ Success!</strong> Settings saved successfully.
+                <strong><i class="fa-solid fa-check"></i> Success!</strong> Settings saved successfully.
             </div>
         }
         else if (!string.IsNullOrEmpty(_errorMessage))
         {
             <div class="alert alert-error">
-                <strong>✗ Error:</strong> @_errorMessage
+                <strong><i class="fa-solid fa-xmark"></i> Error:</strong> @_errorMessage
             </div>
         }
 
@@ -145,7 +145,7 @@
                                 }
                                 else
                                 {
-                                    <span>🔌 Test Connection</span>
+                                    <span><i class="fa-solid fa-plug"></i> Test Connection</span>
                                 }
                             </button>
                         </div>
@@ -1062,7 +1062,7 @@
                         <div class="stats-grid-modern">
                             <div class="stat-card-modern stat-primary">
                                 <div class="stat-header">
-                                    <div class="stat-icon-modern">💬</div>
+                                    <div class="stat-icon-modern"><i class="fa-solid fa-comments"></i></div>
                                     <div class="stat-trend">
                                         <span class="trend-up">↗</span>
                                     </div>
@@ -1076,7 +1076,7 @@
                             
                             <div class="stat-card-modern stat-success">
                                 <div class="stat-header">
-                                    <div class="stat-icon-modern">📨</div>
+                                    <div class="stat-icon-modern"><i class="fa-solid fa-envelope"></i></div>
                                     <div class="stat-trend">
                                         <span class="trend-up">↗</span>
                                     </div>
@@ -1090,7 +1090,7 @@
                             
                             <div class="stat-card-modern stat-info">
                                 <div class="stat-header">
-                                    <div class="stat-icon-modern">👤</div>
+                                    <div class="stat-icon-modern"><i class="fa-solid fa-users"></i></div>
                                     <div class="stat-trend">
                                         <span class="trend-up">↗</span>
                                     </div>
@@ -1102,9 +1102,23 @@
                                 </div>
                             </div>
                             
+                            <div class="stat-card-modern stat-success" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                                <div class="stat-header">
+                                    <div class="stat-icon-modern"><i class="fa-solid fa-circle-check"></i></div>
+                                    <div class="stat-trend">
+                                        <span class="trend-up">↗</span>
+                                    </div>
+                                </div>
+                                <div class="stat-body">
+                                    <div class="stat-value-modern">@_activeUsersCount.ToString("N0")</div>
+                                    <div class="stat-label-modern">Aktif Kullanıcı</div>
+                                    <div class="stat-detail">Son 10 dakika içinde aktif</div>
+                                </div>
+                            </div>
+                            
                             <div class="stat-card-modern stat-warning">
                                 <div class="stat-header">
-                                    <div class="stat-icon-modern">📊</div>
+                                    <div class="stat-icon-modern"><i class="fa-solid fa-chart-column"></i></div>
                                     <div class="stat-trend">
                                         <span class="trend-neutral">→</span>
                                     </div>
@@ -1118,7 +1132,7 @@
                             
                             <div class="stat-card-modern stat-secondary">
                                 <div class="stat-header">
-                                    <div class="stat-icon-modern">⚡</div>
+                                    <div class="stat-icon-modern"><i class="fa-solid fa-bolt"></i></div>
                                     <div class="stat-trend">
                                         <span class="trend-up">↗</span>
                                     </div>
@@ -1132,7 +1146,7 @@
                             
                             <div class="stat-card-modern stat-dark">
                                 <div class="stat-header">
-                                    <div class="stat-icon-modern">🤖</div>
+                                    <div class="stat-icon-modern"><i class="fa-solid fa-robot"></i></div>
                                     <div class="stat-trend">
                                         <span class="trend-up">↗</span>
                                     </div>
@@ -1433,6 +1447,7 @@
     private List<HourlyStats> _hourlyStats = new();
     private int _analyticsPeriod = 30;
     private string _analyticsDomain = string.Empty;
+    private int _activeUsersCount = 0;
     private string _questionSearch = string.Empty;
     private string _dailySortBy = "date";
     private bool _dailySortAsc = false;
@@ -1706,6 +1721,7 @@
             _popularQuestions = await AnalyticsService.GetPopularQuestionsAsync(20, startDate, endDate);
             _dailyStats = await AnalyticsService.GetDailyStatsAsync(_analyticsPeriod, domain);
             _hourlyStats = await AnalyticsService.GetHourlyStatsAsync(DateTime.UtcNow.Date, domain);
+            _activeUsersCount = await AnalyticsService.GetActiveUsersCountAsync(10, domain);
         }
         catch (Exception ex)
         {
@@ -2590,6 +2606,21 @@
         color: #666;
         transition: all 0.3s;
         margin-bottom: -2px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .tab-button i {
+        font-size: 1rem;
+    }
+
+    /* Icon spacing for admin header and buttons */
+    .admin-header h1 i,
+    .admin-header .btn i,
+    .btn i,
+    .alert strong i {
+        margin-right: 0.5rem;
     }
 
     .tab-button:hover {

@@ -11,6 +11,7 @@ public interface IAnalyticsService
     Task<List<DailyStats>> GetDailyStatsAsync(int days = 30, string? domain = null);
     Task<List<HourlyStats>> GetHourlyStatsAsync(DateTime? date = null, string? domain = null);
     Task<DomainStats> GetDomainStatsAsync(string domain, DateTime? startDate = null, DateTime? endDate = null);
+    Task<int> GetActiveUsersCountAsync(int minutesThreshold = 10, string? domain = null);
 }
 
 public class AnalyticsService : IAnalyticsService
@@ -236,6 +237,32 @@ public class AnalyticsService : IAnalyticsService
         {
             _logger.LogError(ex, "Error getting domain stats");
             return new DomainStats { Domain = domain };
+        }
+    }
+
+    public async Task<int> GetActiveUsersCountAsync(int minutesThreshold = 10, string? domain = null)
+    {
+        try
+        {
+            var thresholdTime = DateTime.UtcNow.AddMinutes(-minutesThreshold);
+            
+            var query = _context.ChatSessions
+                .Where(s => s.IsActive && 
+                           ((s.LastActivityAt.HasValue && s.LastActivityAt >= thresholdTime) ||
+                            (!s.LastActivityAt.HasValue && s.CreatedAt >= thresholdTime)));
+
+            if (!string.IsNullOrEmpty(domain))
+            {
+                query = query.Where(s => s.Domain == domain);
+            }
+
+            var activeUsersCount = await query.CountAsync();
+            return activeUsersCount;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting active users count");
+            return 0;
         }
     }
 

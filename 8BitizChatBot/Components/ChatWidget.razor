@@ -254,7 +254,7 @@
                                                             @if (!string.IsNullOrEmpty(dealer.Email))
                                                             {
                                                                 <div class="dealer-email">
-                                                                    <span class="icon">✉️</span>
+                                                                    <span class="icon"><i class="fa-solid fa-envelope"></i></span>
                                                                     <a href="mailto:@dealer.Email">@dealer.Email</a>
                                                                 </div>
                                                             }
@@ -263,7 +263,7 @@
                                                         {
                                                             <div class="dealer-actions">
                                                                 <a href="@dealer.GoogleMapsUrl" target="_blank" class="btn-maps">
-                                                                    🗺️ Haritada Göster
+                                                                    <i class="fa-solid fa-map"></i> Haritada Göster
                                                                 </a>
                                                             </div>
                                                         }
@@ -289,7 +289,7 @@
                                                         @if (!string.IsNullOrEmpty(tire.AvailableSizes))
                                                         {
                                                             <div class="tire-sizes">
-                                                                <span class="icon">📏</span>
+                                                                <span class="icon"><i class="fa-solid fa-ruler"></i></span>
                                                                 <span>@tire.AvailableSizes</span>
                                                             </div>
                                                         }
@@ -1023,10 +1023,11 @@
             }
             else
             {
-                // Location denied or error
+                // Location denied or error - use error message from JavaScript if available
+                var errorText = location?.Error ?? "Konum izni verilmedi veya konum alınamadı. Lütfen konumunuzu manuel olarak paylaşın (örnek: Latitude 41.0082, Longitude 28.9784)";
                 var errorMsg = new ChatMessage
                 {
-                    Content = "Konum izni verilmedi veya konum alınamadı. Lütfen konumunuzu manuel olarak paylaşın (örnek: Latitude 41.0082, Longitude 28.9784)",
+                    Content = errorText,
                     IsUser = false,
                     Timestamp = DateTime.UtcNow
                 };
@@ -2042,6 +2043,7 @@
         color: rgb(6, 19, 43) !important;
         flex: 1 !important;
         line-height: 1.4 !important;
+        width: 160px !important;
     }
 
     .dealer-distance {

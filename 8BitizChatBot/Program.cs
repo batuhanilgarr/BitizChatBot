@@ -156,19 +156,22 @@ app.Use(async (context, next) =>
                 var normalized = requestHost!.Trim().ToLowerInvariant();
                 var www = normalized.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? normalized : $"www.{normalized}";
                 var allowed = $"http://{normalized} https://{normalized} http://{www} https://{www}";
-                context.Response.Headers["Content-Security-Policy"] = $"frame-ancestors {allowed};";
+                // Allow FontAwesome fonts and styles from CDNs
+                context.Response.Headers["Content-Security-Policy"] = $"frame-ancestors {allowed}; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;";
             }
             else
             {
                 // If validation fails, still allow embedding but log it
                 // This prevents the CSP error while maintaining security through API key validation
-                context.Response.Headers["Content-Security-Policy"] = "frame-ancestors *;";
+                // Allow FontAwesome fonts and styles from CDNs
+                context.Response.Headers["Content-Security-Policy"] = "frame-ancestors *; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;";
             }
         }
         catch
         {
             // On error, allow embedding to prevent CSP blocking
-            context.Response.Headers["Content-Security-Policy"] = "frame-ancestors *;";
+            // Allow FontAwesome fonts and styles from CDNs
+            context.Response.Headers["Content-Security-Policy"] = "frame-ancestors *; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;";
         }
     }
     

@@ -5,6 +5,44 @@
 @inject IConfiguration Configuration
 
 <HeadContent>
+    <!-- Preconnect to FontAwesome CDNs for faster loading -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
+    <script>
+        // FontAwesome'u hemen yükle - iframe içinde erken yükleme için
+        (function() {
+            function loadFontAwesome() {
+                if (document.querySelector('link[href*="font-awesome"]') || document.querySelector('link[href*="fontawesome"]')) {
+                    return;
+                }
+                var link = document.createElement('link');
+                link.rel = 'stylesheet';
+                // cdnjs CDN kullan - font dosyaları daha güvenilir yükleniyor
+                link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';
+                link.crossOrigin = 'anonymous';
+                link.referrerPolicy = 'no-referrer';
+                link.onload = function() {
+                    console.log('FontAwesome loaded from jsDelivr');
+                };
+                link.onerror = function() {
+                    // Fallback to cdnjs
+                    console.warn('jsDelivr failed, trying cdnjs');
+                    var fallbackLink = document.createElement('link');
+                    fallbackLink.rel = 'stylesheet';
+                    fallbackLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';
+                    fallbackLink.crossOrigin = 'anonymous';
+                    fallbackLink.referrerPolicy = 'no-referrer';
+                    document.head.appendChild(fallbackLink);
+                };
+                document.head.insertBefore(link, document.head.firstChild);
+            }
+            loadFontAwesome();
+        })();
+    </script>
+    <!-- FontAwesome from cdnjs - most reliable for fonts -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="@GetCssUrl()" />
 </HeadContent>
 

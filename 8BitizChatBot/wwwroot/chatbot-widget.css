@@ -2,6 +2,46 @@
     --chatbot-primary-color: #660000;
     --chatbot-secondary-color: #000000;
     --chatbot-gradient: linear-gradient(135deg, #660000 0%, #5B0000 100%);
+    --chatbot-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Global font reset for iframe */
+body, html {
+    font-family: var(--chatbot-font-family) !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
+}
+
+/* FontAwesome Global Rules - Ensure icons render correctly */
+.fa-solid,
+.fa-regular,
+.fa-brands,
+i.fa-solid,
+i.fa-regular,
+i.fa-brands {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important; /* Solid icons için */
+    font-style: normal !important;
+    font-variant: normal !important;
+    text-rendering: auto !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    display: inline-block !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+
+/* FontAwesome ::before pseudo-element - CRITICAL for icon rendering */
+.fa-solid::before,
+.fa-regular::before,
+.fa-brands::before,
+i.fa-solid::before,
+i.fa-regular::before,
+i.fa-brands::before {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important;
+    display: inline-block !important;
 }
 
 /* Floating Chat Widget Styles - Modern Professional Theme */
@@ -79,7 +119,10 @@
 /* Host sayfa CSS'ini minimuma indirmek için temel reset */
 .chat-widget-container, .chat-widget-container * {
     box-sizing: border-box !important;
-    font-family: inherit !important;
+    font-family: var(--chatbot-font-family) !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
 }
 
 @keyframes slideInUp {
@@ -124,6 +167,7 @@
 }
 
 .chat-widget-title {
+    font-family: var(--chatbot-font-family) !important;
     font-size: 18px !important;
     font-weight: 600 !important;
     color: #ffffff !important;
@@ -133,6 +177,7 @@
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
     overflow: hidden !important;
+    letter-spacing: -0.02em !important;
 }
 
 .session-id-display {
@@ -421,8 +466,11 @@
 }
 
 .message-text {
-    line-height: 1.5 !important;
+    line-height: 1.6 !important;
     word-wrap: break-word !important;
+    font-family: var(--chatbot-font-family) !important;
+    font-size: 14px !important;
+    letter-spacing: -0.01em !important;
 }
 
 .message-text strong {
@@ -745,6 +793,7 @@
 }
 
 .quick-reply-btn {
+    font-family: var(--chatbot-font-family) !important;
     background: #fafafa !important;
     color: var(--chatbot-primary-color) !important;
     border: 2px solid var(--chatbot-primary-color) !important;
@@ -758,6 +807,7 @@
     display: inline-flex !important;
     align-items: center !important;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+    letter-spacing: -0.01em !important;
 }
 
 .quick-reply-btn:hover:not(:disabled) {
@@ -780,19 +830,20 @@
 }
 
 .chat-input {
+    font-family: var(--chatbot-font-family) !important;
     border: 1px solid #e5e7eb !important;
     border-radius: 12px !important;
     width: 100% !important;
     font-size: 14px !important;
     padding: 12px 16px !important;
     resize: none !important;
-    line-height: 1.5 !important;
+    line-height: 1.6 !important;
     overflow-x: hidden !important;
     flex: 1 !important;
-    font-family: inherit !important;
     background: #ffffff !important;
     color: #1a1a1a !important;
     transition: all 0.2s ease !important;
+    letter-spacing: -0.01em !important;
 }
 
 .chat-input:focus {
@@ -952,22 +1003,30 @@
 }
 
 .dealer-name {
+    font-family: var(--chatbot-font-family) !important;
     margin: 0 !important;
     font-size: 16px !important;
     font-weight: 600 !important;
     color: rgb(6, 19, 43) !important;
     flex: 1 !important;
     line-height: 1.4 !important;
+    letter-spacing: -0.01em !important;
 }
 
 .dealer-distance {
-    background: var(--chatbot-secondary-color) !important;
+    background: linear-gradient(135deg, var(--chatbot-primary-color) 0%, var(--chatbot-secondary-color) 100%) !important;
     color: white !important;
-    padding: 4px 10px !important;
-    border-radius: 12px !important;
-    font-size: 12px !important;
-    font-weight: 600 !important;
+    padding: 6px 12px !important;
+    border-radius: 16px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
     white-space: nowrap !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    line-height: 1 !important;
+    letter-spacing: 0.3px !important;
 }
 
 .dealer-info {
@@ -990,6 +1049,39 @@
 .dealer-info .icon {
     font-size: 0.9rem;
     flex-shrink: 0;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 18px !important;
+    color: var(--chatbot-primary-color) !important;
+}
+
+.dealer-info .icon i,
+.dealer-info .icon i.fa-solid,
+.dealer-info .icon i.fa-regular,
+.dealer-info .icon i.fa-brands {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important; /* Solid icons için */
+    font-style: normal !important;
+    font-variant: normal !important;
+    text-rendering: auto !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    display: inline-block !important;
+    font-size: 14px !important;
+    width: 14px !important;
+    height: 14px !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+
+/* FontAwesome icon'ları için ::before pseudo-element */
+.dealer-info .icon i.fa-solid::before,
+.dealer-info .icon i.fa-regular::before,
+.dealer-info .icon i.fa-brands::before {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important;
+    display: inline-block !important;
 }
 
 .dealer-info a {
@@ -1011,8 +1103,11 @@
 }
 
 .btn-maps {
-    display: inline-block !important;
-    padding: 8px 16px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 10px 16px !important;
     color: white !important;
     text-decoration: none !important;
     border-radius: 8px !important;
@@ -1020,6 +1115,33 @@
     font-weight: 500 !important;
     transition: all 0.2s ease !important;
     background: var(--chatbot-secondary-color) !important;
+    width: 100% !important;
+}
+
+.btn-maps i,
+.btn-maps i.fa-solid,
+.btn-maps i.fa-regular,
+.btn-maps i.fa-brands {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important; /* Solid icons için */
+    font-style: normal !important;
+    font-variant: normal !important;
+    text-rendering: auto !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    display: inline-block !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+
+/* FontAwesome icon'ları için ::before pseudo-element */
+.btn-maps i.fa-solid::before,
+.btn-maps i.fa-regular::before,
+.btn-maps i.fa-brands::before {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important;
+    display: inline-block !important;
 }
 
 .btn-maps:hover {
@@ -1079,12 +1201,14 @@
 }
 
 .tire-name {
+    font-family: var(--chatbot-font-family) !important;
     margin: 0 !important;
     font-size: 16px !important;
     font-weight: 600 !important;
     color: rgb(6, 19, 43) !important;
     flex: 1 !important;
     line-height: 1.4 !important;
+    letter-spacing: -0.01em !important;
 }
 
 .tire-season {
@@ -1129,6 +1253,17 @@
 
 .tire-sizes .icon {
     font-size: 0.9rem;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 18px !important;
+    color: var(--chatbot-primary-color) !important;
+}
+
+.tire-sizes .icon i {
+    font-size: 14px !important;
+    width: 14px !important;
+    height: 14px !important;
 }
 
 .tire-actions {

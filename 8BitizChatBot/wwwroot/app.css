@@ -113,3 +113,89 @@ main {
     display: none;
 }
 
+/* FontAwesome Global Rules - Ensure icons render correctly */
+.fa-solid,
+.fa-regular,
+.fa-brands,
+i.fa-solid,
+i.fa-regular,
+i.fa-brands {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important; /* Solid icons için */
+    font-style: normal !important;
+    font-variant: normal !important;
+    text-rendering: auto !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    display: inline-block !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+
+/* FontAwesome ::before pseudo-element - CRITICAL for icon rendering */
+.fa-solid::before,
+.fa-regular::before,
+.fa-brands::before,
+i.fa-solid::before,
+i.fa-regular::before,
+i.fa-brands::before {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important;
+    display: inline-block !important;
+}
+
+/* Dealer card icon styles */
+.dealer-info .icon i,
+.dealer-info .icon i.fa-solid,
+.dealer-info .icon i.fa-regular,
+.dealer-info .icon i.fa-brands {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    font-variant: normal !important;
+    text-rendering: auto !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    display: inline-block !important;
+    font-size: 14px !important;
+    width: 14px !important;
+    height: 14px !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+
+/* Button icon styles */
+.btn-maps i,
+.btn-maps i.fa-solid,
+.btn-maps i.fa-regular,
+.btn-maps i.fa-brands,
+.btn-location i,
+.btn-location i.fa-solid {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    font-variant: normal !important;
+    text-rendering: auto !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    display: inline-block !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+
+/* Tire card icon styles */
+.tire-sizes .icon i,
+.tire-sizes .icon i.fa-solid {
+    font-family: "Font Awesome 6 Free" !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    font-variant: normal !important;
+    text-rendering: auto !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    display: inline-block !important;
+    line-height: 1 !important;
+    text-align: center !important;
+}
+

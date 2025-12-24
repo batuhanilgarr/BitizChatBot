@@ -102,7 +102,7 @@
         iframe.id = 'bridgestone-chatbot-iframe';
         iframe.src = getEmbedUrl();
         iframe.style.cssText = 'position:fixed;bottom:20px;right:20px;width:100%;height:100%;max-width:calc(100vw - 40px);max-height:calc(100vh - 40px);border:none;border-radius:16px;box-shadow:0 8px 36px rgba(0,18,46,0.16);z-index:9999;background:transparent;';
-        iframe.setAttribute('allow', 'microphone; camera');
+        iframe.setAttribute('allow', 'microphone; camera; geolocation');
         iframe.setAttribute('frameborder', '0');
         iframe.setAttribute('scrolling', 'no');
         

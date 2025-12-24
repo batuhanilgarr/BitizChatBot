@@ -141,6 +141,216 @@ else if (_checked)
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            Logger.LogInformation("EmbedChat: OnAfterRenderAsync - Checking FontAwesome loading");
+            
+            // Ensure FontAwesome is loaded in iframe - check and load if missing
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                (function() {
+                    console.log('[FontAwesome] Starting FontAwesome check and load...');
+                    
+                    function checkFontLoaded() {
+                        var testIcon = document.createElement('i');
+                        testIcon.className = 'fa-solid fa-location-dot';
+                        testIcon.style.position = 'absolute';
+                        testIcon.style.visibility = 'hidden';
+                        testIcon.style.fontSize = '16px';
+                        document.body.appendChild(testIcon);
+                        
+                        try {
+                            var computed = window.getComputedStyle(testIcon, ':before');
+                            var fontFamily = computed.getPropertyValue('font-family');
+                            var content = computed.getPropertyValue('content');
+                            var width = computed.getPropertyValue('width');
+                            
+                            console.log('[FontAwesome] Font check:', {
+                                fontFamily: fontFamily,
+                                content: content,
+                                width: width,
+                                hasFontAwesome: fontFamily && fontFamily.includes('Font Awesome')
+                            });
+                            
+                            document.body.removeChild(testIcon);
+                            
+                            if (fontFamily && fontFamily.includes('Font Awesome') && content && content !== 'none') {
+                                console.log('[FontAwesome] ✓ Fonts are loaded and working!');
+                                return true;
+                            } else {
+                                console.warn('[FontAwesome] ✗ Fonts are NOT loaded properly');
+                                return false;
+                            }
+                        } catch(e) {
+                            console.error('[FontAwesome] Error checking font:', e);
+                            document.body.removeChild(testIcon);
+                            return false;
+                        }
+                    }
+                    
+                    function loadFontAwesome() {
+                        console.log('[FontAwesome] loadFontAwesome called');
+                        
+                        var existing = document.querySelector('link[href*=""font-awesome""]') || 
+                                      document.querySelector('link[href*=""fontawesome""]') ||
+                                      document.querySelector('link[href*=""fortawesome""]');
+                        
+                        console.log('[FontAwesome] Existing link found:', !!existing);
+                        
+                        if (existing) {
+                            console.log('[FontAwesome] Existing link href:', existing.href);
+                            // Wait a bit for fonts to load, then check
+                            setTimeout(function() {
+                                if (!checkFontLoaded()) {
+                                    console.warn('[FontAwesome] CSS loaded but fonts not working, trying to reload...');
+                                    loadFontAwesomeCSS();
+                                }
+                            }, 500);
+                            return;
+                        }
+                        
+                        loadFontAwesomeCSS();
+                    }
+                    
+                    function loadFontAwesomeCSS() {
+                        console.log('[FontAwesome] Loading FontAwesome CSS from cdnjs...');
+                        
+                        // Use cdnjs - more reliable for font files
+                        var link = document.createElement('link');
+                        link.rel = 'stylesheet';
+                        link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';
+                        link.integrity = 'sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==';
+                        link.crossOrigin = 'anonymous';
+                        link.referrerPolicy = 'no-referrer';
+                        
+                        link.onload = function() {
+                            console.log('[FontAwesome] ✓ CSS loaded from cdnjs');
+                            console.log('[FontAwesome] Checking font files...');
+                            
+                            // Preload font files to ensure they load
+                            var fontUrls = [
+                                'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2',
+                                'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff'
+                            ];
+                            
+                            fontUrls.forEach(function(fontUrl) {
+                                var fontLink = document.createElement('link');
+                                fontLink.rel = 'preload';
+                                fontLink.as = 'font';
+                                fontLink.type = 'font/woff2';
+                                fontLink.crossOrigin = 'anonymous';
+                                fontLink.href = fontUrl;
+                                document.head.appendChild(fontLink);
+                                console.log('[FontAwesome] Preloading font:', fontUrl);
+                            });
+                            
+                            // Check if fonts are loaded after CSS loads
+                            setTimeout(function() {
+                                if (checkFontLoaded()) {
+                                    console.log('[FontAwesome] ✓ All fonts loaded successfully!');
+                                    
+                                    // Test actual icon rendering
+                                    var testIcon = document.createElement('i');
+                                    testIcon.className = 'fa-solid fa-location-dot';
+                                    testIcon.style.position = 'absolute';
+                                    testIcon.style.visibility = 'hidden';
+                                    testIcon.style.fontSize = '20px';
+                                    document.body.appendChild(testIcon);
+                                    
+                                    setTimeout(function() {
+                                        var computed = window.getComputedStyle(testIcon, ':before');
+                                        var content = computed.getPropertyValue('content');
+                                        var fontFamily = computed.getPropertyValue('font-family');
+                                        var width = computed.getPropertyValue('width');
+                                        
+                                        console.log('[FontAwesome] Icon render test:', {
+                                            content: content,
+                                            fontFamily: fontFamily,
+                                            width: width,
+                                            hasContent: content && content !== 'none' && content !== '',
+                                            hasFontFamily: fontFamily && fontFamily.includes('Font Awesome')
+                                        });
+                                        
+                                        // Check if icon is actually visible
+                                        var iconElements = document.querySelectorAll('.fa-solid, .fa-regular, .fa-brands, i.fa-solid, i.fa-regular, i.fa-brands');
+                                        console.log('[FontAwesome] Found ' + iconElements.length + ' icon elements in DOM');
+                                        
+                                        if (iconElements.length > 0) {
+                                            var firstIcon = iconElements[0];
+                                            var firstIconComputed = window.getComputedStyle(firstIcon, ':before');
+                                            console.log('[FontAwesome] First icon computed style:', {
+                                                content: firstIconComputed.getPropertyValue('content'),
+                                                fontFamily: firstIconComputed.getPropertyValue('font-family'),
+                                                display: firstIconComputed.getPropertyValue('display'),
+                                                width: firstIconComputed.getPropertyValue('width'),
+                                                height: firstIconComputed.getPropertyValue('height')
+                                            });
+                                        }
+                                        
+                                        document.body.removeChild(testIcon);
+                                    }, 100);
+                                    
+                                    var event = new Event('fontawesome-loaded');
+                                    document.dispatchEvent(event);
+                                } else {
+                                    console.error('[FontAwesome] ✗ CSS loaded but fonts failed to load');
+                                    console.log('[FontAwesome] Network tab - check if font files (woff2, woff) are loading');
+                                    // List all stylesheets
+                                    var stylesheets = Array.from(document.styleSheets);
+                                    stylesheets.forEach(function(sheet, index) {
+                                        try {
+                                            console.log('[FontAwesome] Stylesheet ' + index + ':', sheet.href);
+                                            if (sheet.href && sheet.href.includes('fontawesome')) {
+                                                console.log('[FontAwesome] Found FontAwesome stylesheet:', sheet.href);
+                                                // Try to access font-face rules
+                                                try {
+                                                    var rules = sheet.cssRules || sheet.rules;
+                                                    if (rules) {
+                                                        var fontFaceCount = 0;
+                                                        for (var i = 0; i < rules.length; i++) {
+                                                            if (rules[i].type === CSSRule.FONT_FACE_RULE) {
+                                                                fontFaceCount++;
+                                                                var fontFace = rules[i];
+                                                                console.log('[FontAwesome] Font-face rule ' + fontFaceCount + ':', {
+                                                                    fontFamily: fontFace.style.fontFamily,
+                                                                    src: fontFace.style.src
+                                                                });
+                                                            }
+                                                        }
+                                                        console.log('[FontAwesome] Total font-face rules found:', fontFaceCount);
+                                                    }
+                                                } catch(e) {
+                                                    console.warn('[FontAwesome] Cannot access stylesheet rules (CORS):', e.message);
+                                                }
+                                            }
+                                        } catch(e) {
+                                            console.warn('[FontAwesome] Error accessing stylesheet:', e);
+                                        }
+                                    });
+                                }
+                            }, 1500);
+                        };
+                        
+                        link.onerror = function(e) {
+                            console.error('[FontAwesome] ✗ cdnjs failed:', e);
+                        };
+                        
+                        document.head.insertBefore(link, document.head.firstChild);
+                    }
+                    
+                    // Try immediately
+                    loadFontAwesome();
+                    
+                    // Also try after delays
+                    setTimeout(loadFontAwesome, 100);
+                    setTimeout(loadFontAwesome, 500);
+                    setTimeout(loadFontAwesome, 1000);
+                    setTimeout(function() {
+                        console.log('[FontAwesome] Final check after 2 seconds...');
+                        checkFontLoaded();
+                    }, 2000);
+                })();
+            ");
+        }
         await Task.CompletedTask;
     }
 
