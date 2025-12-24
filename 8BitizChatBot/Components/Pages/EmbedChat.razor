@@ -7,6 +7,7 @@
 @inject IDomainApiKeyService DomainApiKeyService
 @inject NavigationManager NavManager
 @inject IConfiguration Configuration
+@inject IJSRuntime JSRuntime
 @rendermode RenderMode.InteractiveServer
 @layout EmbedLayout
 
@@ -75,6 +76,37 @@ else if (_checked)
 
         _isAuthorized = await DomainApiKeyService.ValidateAsync(domain, apiKey);
         _checked = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // CSS'i JavaScript ile dinamik olarak yükle (host sayfa CSS'lerinden sonra)
+            // CSS yüklendikten sonra tekrar render et
+            var cssUrl = GetCssUrl();
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                (function() {{
+                    if (!document.getElementById('chatbot-widget-css')) {{
+                        var link = document.createElement('link');
+                        link.id = 'chatbot-widget-css';
+                        link.rel = 'stylesheet';
+                        link.type = 'text/css';
+                        link.href = '{cssUrl}';
+                        link.media = 'all';
+                        // CSS yüklendikten sonra callback
+                        link.onload = function() {{
+                            // CSS yüklendi, tüm stilleri zorla uygula
+                            var style = document.createElement('style');
+                            style.textContent = '/* Force CSS application */';
+                            document.head.appendChild(style);
+                        }};
+                        // CSS'i head'in en sonuna ekle (en yüksek öncelik)
+                        document.head.appendChild(link);
+                    }}
+                }})();
+            ");
+        }
     }
 
     private string GetCssUrl()

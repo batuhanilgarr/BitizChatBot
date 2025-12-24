@@ -1,8 +1,24 @@
 @namespace BitizChatBot.Components.Layout
 @inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager NavManager
+@inject IConfiguration Configuration
+
+<HeadContent>
+    <link rel="stylesheet" href="@GetCssUrl()" />
+</HeadContent>
 
 <div>
     @Body
 </div>
+
+@code {
+    private string GetCssUrl()
+    {
+        var baseUrl = Configuration["BaseUrl"] ?? NavManager.BaseUri.TrimEnd('/');
+        // Mutlak URL kullanarak CSS'in her zaman yüklenmesini sağla
+        return $"{baseUrl}/chatbot-widget.css";
+    }
+}
 
 
