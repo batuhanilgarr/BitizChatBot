@@ -29,6 +29,17 @@ else
 
 // Register Services
 builder.Services.AddHttpContextAccessor();
+
+// Add Session for secure authentication
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+});
 builder.Services.AddScoped<IAdminSettingsService, AdminSettingsService>();
 builder.Services.AddSingleton<ITurkishLocationService, TurkishLocationService>();
 builder.Services.AddScoped<IDomainApiKeyService, DomainApiKeyService>();
@@ -78,6 +89,20 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
+app.UseSession();
+
+// Allow iframe embedding for /embed endpoint
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/embed"))
+    {
+        // Remove X-Frame-Options to allow iframe embedding from any domain
+        context.Response.Headers.Remove("X-Frame-Options");
+        // Set Content-Security-Policy to allow framing
+        context.Response.Headers.Add("Content-Security-Policy", "frame-ancestors *;");
+    }
+    await next();
+});
 
 // Security Middleware
 app.UseMiddleware<RateLimitMiddleware>();

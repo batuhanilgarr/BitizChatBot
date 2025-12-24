@@ -12,6 +12,8 @@
 @inject IAnalyticsService AnalyticsService
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
+@inject IHttpContextAccessor HttpContextAccessor
+@using Microsoft.AspNetCore.Http
 @rendermode RenderMode.InteractiveServer
 
 <PageTitle>Admin Dashboard - LLM Settings</PageTitle>
@@ -54,8 +56,13 @@
         {
 
         <div class="admin-header">
-            <h1>🔧 Admin Dashboard</h1>
-            <p class="subtitle">LLM Provider & Chatbot Configuration</p>
+            <div>
+                <h1>🔧 Admin Dashboard</h1>
+                <p class="subtitle">LLM Provider & Chatbot Configuration</p>
+            </div>
+            <button class="btn btn-secondary" @onclick="HandleLogout" style="margin-left: auto;">
+                🚪 Çıkış Yap
+            </button>
         </div>
 
         <div class="tabs">
@@ -1449,26 +1456,41 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_isAuthenticated)
+        if (firstRender)
         {
-            try
+            // Server-side session'dan authentication kontrolü
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext != null)
             {
-                // Tarayıcı localStorage'dan admin oturum bilgisini oku
-                var flag = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "adminAuth");
-                if (flag == "1")
+                var session = httpContext.Session;
+                var isAuthenticated = session.GetString("AdminAuthenticated");
+                var userId = session.GetInt32("AdminUserId");
+                
+                if (isAuthenticated == "true" && userId.HasValue)
                 {
-                    _isAuthenticated = true;
+                    // Session'dan kullanıcı bilgisini yükle
+                    try
+                    {
+                        var user = await UserService.GetByIdAsync(userId.Value);
+                        if (user != null && user.IsActive && user.IsAdmin)
+                        {
+                            _isAuthenticated = true;
+                            _currentUser = user;
+                        }
+                        else
+                        {
+                            // Kullanıcı artık aktif değilse session'ı temizle
+                            session.Clear();
+                        }
+                    }
+                    catch
+                    {
+                        // Hata durumunda session'ı temizle
+                        session.Clear();
+                    }
                 }
             }
-            catch
-            {
-                // localStorage kullanılamıyorsa sessizce devam et
-            }
-            _authChecked = true;
-            StateHasChanged();
-        }
-        else if (firstRender)
-        {
+            
             _authChecked = true;
             StateHasChanged();
         }
@@ -1872,14 +1894,23 @@
                 _authChecked = true;
                 _currentUser = user;
 
-                try
+                // Server-side session'a güvenli authentication bilgisi kaydet
+                var httpContext = HttpContextAccessor.HttpContext;
+                if (httpContext != null)
                 {
-                    // Başarılı girişten sonra tarayıcıda oturum bilgisini sakla
-                    await JSRuntime.InvokeVoidAsync("localStorage.setItem", "adminAuth", "1");
-                }
-                catch
-                {
-                    // localStorage hatası olursa sessiz geç
+                    var session = httpContext.Session;
+                    session.SetString("AdminAuthenticated", "true");
+                    session.SetInt32("AdminUserId", user.Id);
+                    
+                    // LocalStorage'dan eski güvensiz değeri temizle
+                    try
+                    {
+                        await JSRuntime.InvokeVoidAsync("localStorage.removeItem", "adminAuth");
+                    }
+                    catch
+                    {
+                        // localStorage hatası olursa sessiz geç
+                    }
                 }
             }
             else
@@ -1891,6 +1922,35 @@
         {
             _loginError = $"Giriş sırasında bir hata oluştu: {ex.Message}";
         }
+    }
+
+    private async Task HandleLogout()
+    {
+        // Session'ı temizle
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            httpContext.Session.Clear();
+        }
+
+        // LocalStorage'dan eski güvensiz değeri temizle
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("localStorage.removeItem", "adminAuth");
+        }
+        catch
+        {
+            // localStorage hatası olursa sessiz geç
+        }
+
+        // State'i sıfırla
+        _isAuthenticated = false;
+        _authChecked = true;
+        _currentUser = null;
+        _loginModel = new LoginModel();
+        _loginError = string.Empty;
+        
+        StateHasChanged();
     }
 
     private async Task HandleNewDomainKey()
@@ -2248,10 +2308,17 @@
     }
 
     .admin-header {
-        text-align: center;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         margin-bottom: 2rem;
         padding-bottom: 1rem;
         border-bottom: 2px solid #e0e0e0;
+    }
+    
+    .admin-header > div {
+        text-align: center;
+        flex: 1;
     }
 
     .login-card {
