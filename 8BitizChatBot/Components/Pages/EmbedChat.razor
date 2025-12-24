@@ -6,11 +6,12 @@
 @using Microsoft.AspNetCore.Components.Web
 @inject IDomainApiKeyService DomainApiKeyService
 @inject NavigationManager NavManager
+@inject IConfiguration Configuration
 @rendermode RenderMode.InteractiveServer
 @layout EmbedLayout
 
 <HeadContent>
-    <link rel="stylesheet" href="~/chatbot-widget.css" />
+    <link rel="stylesheet" href="@GetCssUrl()" />
 </HeadContent>
 
 @if (_isAuthorized)
@@ -74,6 +75,12 @@ else if (_checked)
 
         _isAuthorized = await DomainApiKeyService.ValidateAsync(domain, apiKey);
         _checked = true;
+    }
+
+    private string GetCssUrl()
+    {
+        var baseUrl = Configuration["BaseUrl"] ?? NavManager.BaseUri.TrimEnd('/');
+        return $"{baseUrl}/chatbot-widget.css";
     }
 }
 
