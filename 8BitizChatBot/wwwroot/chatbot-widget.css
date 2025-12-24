@@ -76,7 +76,7 @@
     visibility: visible !important;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px) and (pointer: coarse) {
     .chat-widget-container {
         bottom: 0 !important;
         right: 0 !important;
@@ -1173,7 +1173,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px) and (pointer: coarse) {
     .chat-widget-container {
         width: calc(100vw - 40px) !important;
         height: calc(100vh - 120px) !important;
