@@ -87,6 +87,13 @@ else if (_checked)
             var cssUrl = GetCssUrl();
             await JSRuntime.InvokeVoidAsync("eval", $@"
                 (function() {{
+                    // Önce mevcut Bootstrap ve app.css linklerini kaldır (eğer varsa)
+                    var existingBootstrap = document.querySelector('link[href*=""bootstrap""]');
+                    if (existingBootstrap) existingBootstrap.remove();
+                    var existingAppCss = document.querySelector('link[href=""app.css""]');
+                    if (existingAppCss) existingAppCss.remove();
+                    
+                    // Chatbot CSS'ini yükle
                     if (!document.getElementById('chatbot-widget-css')) {{
                         var link = document.createElement('link');
                         link.id = 'chatbot-widget-css';
@@ -96,10 +103,14 @@ else if (_checked)
                         link.media = 'all';
                         // CSS yüklendikten sonra callback
                         link.onload = function() {{
+                            console.log('Chatbot CSS loaded successfully');
                             // CSS yüklendi, tüm stilleri zorla uygula
                             var style = document.createElement('style');
                             style.textContent = '/* Force CSS application */';
                             document.head.appendChild(style);
+                        }};
+                        link.onerror = function() {{
+                            console.error('Failed to load chatbot CSS from: {cssUrl}');
                         }};
                         // CSS'i head'in en sonuna ekle (en yüksek öncelik)
                         document.head.appendChild(link);

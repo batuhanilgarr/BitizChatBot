@@ -8,8 +8,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
-    <link rel="stylesheet" href="app.css" />
+    @* Bootstrap ve app.css sadece embed route'u dışında yükle *@
+    <script>
+        // Embed route kontrolü - Bootstrap ve app.css'i yükleme
+        if (window.location.pathname !== '/embed') {
+            var bootstrapLink = document.createElement('link');
+            bootstrapLink.rel = 'stylesheet';
+            bootstrapLink.href = 'bootstrap/bootstrap.min.css';
+            document.head.appendChild(bootstrapLink);
+            
+            var appCssLink = document.createElement('link');
+            appCssLink.rel = 'stylesheet';
+            appCssLink.href = 'app.css';
+            document.head.appendChild(appCssLink);
+        }
+    </script>
     <HeadOutlet />
 </head>
 
