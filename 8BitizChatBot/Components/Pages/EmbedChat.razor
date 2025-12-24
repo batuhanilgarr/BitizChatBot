@@ -3,10 +3,15 @@
 @using BitizChatBot.Components
 @using BitizChatBot.Components.Layout
 @using BitizChatBot.Services
+@using Microsoft.AspNetCore.Components.Web
 @inject IDomainApiKeyService DomainApiKeyService
 @inject NavigationManager NavManager
 @rendermode RenderMode.InteractiveServer
 @layout EmbedLayout
+
+<HeadContent>
+    <link rel="stylesheet" href="~/chatbot-widget.css" />
+</HeadContent>
 
 @if (_isAuthorized)
 {
